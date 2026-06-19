@@ -1,0 +1,31 @@
+# --- Core (Python 3.10 - 3.13 supported) ---
+# JobSpy is vendored at core/_vendor/jobspy — these are its transitive deps.
+pandas>=2.1.0
+numpy>=1.26.0           # 2.x preferred; has wheels for 3.13
+pyyaml>=6.0
+python-dotenv>=1.0.0
+typer>=0.12.0
+rich>=13.7.0
+pydantic>=2.3.0
+requests>=2.31.0
+tls-client>=1.0.1
+markdownify>=1.1.0
+regex>=2024.4.28
+
+# --- LLM clients ---
+anthropic>=0.40.0              # Claude (default)
+openai>=1.40.0                 # OpenAI / DeepSeek (optional)
+google-generativeai>=0.8.0     # Gemini (optional, has free tier)
+
+# --- Document parsing & generation ---
+pdfplumber>=0.11.0
+python-docx>=1.1.0
+reportlab>=4.2.0
+
+# --- Web fetch ---
+httpx>=0.27.0
+beautifulsoup4>=4.12.0
+
+# --- Web UI (Flask) ---
+flask>=3.0.0
+flask-cors>=4.0.0

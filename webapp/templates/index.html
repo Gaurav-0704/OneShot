@@ -1,0 +1,740 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>OneShot</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+<!-- Particle background -->
+<canvas id="bg-canvas" aria-hidden="true"></canvas>
+
+<div class="layout">
+
+<!-- ══ LEFT SIDEBAR ═══════════════════════════════════════════════════════ -->
+<aside class="sidebar">
+
+  <!-- Logo -->
+  <a class="sidebar-logo" href="#" onclick="switchTab('home');return false" aria-label="OneShot home">
+    <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="14" cy="14" r="13" stroke="currentColor" stroke-width="1.5"/>
+      <circle cx="14" cy="14" r="9"  stroke="currentColor" stroke-width="1.5" opacity=".7"/>
+      <circle cx="14" cy="14" r="5"  stroke="currentColor" stroke-width="1.5" opacity=".5"/>
+      <circle cx="14" cy="14" r="2.5" fill="currentColor"/>
+    </svg>
+    <span class="brand-name">OneShot</span>
+  </a>
+
+  <!-- Nav -->
+  <nav class="sidebar-nav" aria-label="Main navigation">
+
+    <button class="nav-item active" data-tab="home" onclick="switchTab('home')">
+      <span class="nav-label">
+        <span class="nav-icon">🏠</span>Home
+      </span>
+    </button>
+
+    <button class="nav-item" data-tab="search" onclick="switchTab('search')">
+      <span class="nav-label">
+        <span class="nav-icon">🔍</span>Search &amp; Run
+      </span>
+      <span class="nav-badge live" id="nav-badge-live" hidden>● live</span>
+    </button>
+
+    <button class="nav-item" data-tab="apply" onclick="switchTab('apply')">
+      <span class="nav-label">
+        <span class="nav-icon">⚡</span>Apply
+      </span>
+      <span class="nav-badge warn" id="count-pending">0</span>
+    </button>
+
+    <button class="nav-item" data-tab="records" onclick="switchTab('records')">
+      <span class="nav-label">
+        <span class="nav-icon">📋</span>Records
+      </span>
+      <span class="nav-badge ok" id="count-applied">0</span>
+    </button>
+
+    <button class="nav-item" data-tab="documents" onclick="switchTab('documents')">
+      <span class="nav-label">
+        <span class="nav-icon">📄</span>Documents
+      </span>
+    </button>
+
+    <button class="nav-item" data-tab="profile" onclick="switchTab('profile')">
+      <span class="nav-label">
+        <span class="nav-icon">👤</span>Profile
+      </span>
+    </button>
+
+    <button class="nav-item" data-tab="settings" onclick="switchTab('settings')">
+      <span class="nav-label">
+        <span class="nav-icon">⚙️</span>Settings
+      </span>
+      <span class="nav-badge err" id="count-errors" hidden>0</span>
+    </button>
+
+  </nav>
+
+  <!-- Footer: completeness + status -->
+  <div class="sidebar-footer">
+
+    <!-- Profile completeness widget (auto-hides at 100%) -->
+    <div class="completeness-widget" id="completeness-widget" hidden>
+      <div class="cw-top">
+        <span class="cw-label">Profile</span>
+        <span class="cw-pct" id="completeness-pct">0%</span>
+      </div>
+      <div class="progress">
+        <div class="progress-bar" id="progress-bar" style="width:0%"></div>
+      </div>
+      <div class="cw-missing" id="cw-missing-list"></div>
+    </div>
+
+    <!-- Runner status -->
+    <div class="sidebar-status">
+      <div class="status-dot" id="status-dot"></div>
+      <span class="status-text" id="status-text">idle</span>
+    </div>
+
+    <!-- Provider / key info -->
+    <div class="env-line" id="env-line">checking…</div>
+
+  </div>
+</aside>
+
+<!-- ══ MAIN CONTENT ════════════════════════════════════════════════════════ -->
+<main class="main">
+
+<!-- ── HOME ──────────────────────────────────────────────────────────────── -->
+<section class="tab" id="tab-home">
+
+  <!-- Toggle row (shown in widgets mode) -->
+  <div class="home-toggle-row" id="home-toggle-row" hidden>
+    <div class="home-greeting-text">Hey, <span id="home-greeting-name">there</span> 👋</div>
+    <div class="view-toggle">
+      <button class="vt-btn" id="vt-plain" onclick="setHomeView('plain')">Plain</button>
+      <button class="vt-btn active" id="vt-widgets" onclick="setHomeView('widgets')">Dashboard</button>
+    </div>
+  </div>
+
+  <!-- PLAIN view: hero -->
+  <div id="home-plain" class="home-hero">
+    <div class="hero-logo">
+      <svg width="72" height="72" viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="36" cy="36" r="34" stroke="currentColor" stroke-width="2"/>
+        <circle cx="36" cy="36" r="23" stroke="currentColor" stroke-width="2" opacity=".65"/>
+        <circle cx="36" cy="36" r="13" stroke="currentColor" stroke-width="2" opacity=".4"/>
+        <circle cx="36" cy="36" r="6"  fill="currentColor"/>
+      </svg>
+      <div class="hero-wordmark">OneShot</div>
+    </div>
+    <div class="hero-greeting">Hey, <span id="hero-greeting-name">there</span> — ready to fire?</div>
+    <div class="hero-sub">Automated job applications powered by AI. Find, tailor, and apply — one shot at a time.</div>
+    <div class="hero-cta">
+      <button class="btn primary" onclick="switchTab('search')">🔍 Start a Search Run</button>
+      <button class="btn" onclick="switchTab('apply')">⚡ Review Ready Jobs</button>
+    </div>
+  </div>
+
+  <!-- WIDGETS view: dashboard -->
+  <div id="home-widgets" hidden>
+
+    <!-- Stat mini row -->
+    <div class="stat-mini-row">
+      <div class="stat-mini">
+        <div class="stat-mini-val ok count-up" id="stat-applied-today">—</div>
+        <div class="stat-mini-lbl">Applied today</div>
+      </div>
+      <div class="stat-mini">
+        <div class="stat-mini-val blue count-up" id="stat-applied-life">—</div>
+        <div class="stat-mini-lbl">Lifetime applied</div>
+      </div>
+      <div class="stat-mini">
+        <div class="stat-mini-val warn count-up" id="stat-pending-life">—</div>
+        <div class="stat-mini-lbl">Pending review</div>
+        <div class="stat-mini-sub" id="stat-runner">—</div>
+      </div>
+      <div class="stat-mini">
+        <div class="stat-mini-val err count-up" id="stat-failed-life">—</div>
+        <div class="stat-mini-lbl">Failed</div>
+        <div class="stat-mini-sub muted" id="stat-runid">—</div>
+      </div>
+    </div>
+
+    <!-- Widgets grid -->
+    <div class="widgets-grid">
+
+      <!-- Applied over time -->
+      <div class="card chart-card">
+        <div class="card-head">
+          <h3>Applications / Day</h3>
+          <span class="pill muted small" id="chart-applied-range">Last 7 days</span>
+        </div>
+        <div class="card-body">
+          <div class="chart-wrap"><canvas id="chart-applied"></canvas></div>
+        </div>
+      </div>
+
+      <!-- ATS score distribution -->
+      <div class="card chart-card">
+        <div class="card-head"><h3>ATS Score Distribution</h3></div>
+        <div class="card-body">
+          <div class="chart-wrap"><canvas id="chart-ats"></canvas></div>
+        </div>
+      </div>
+
+      <!-- Fit score -->
+      <div class="card chart-card">
+        <div class="card-head"><h3>Fit Scores</h3></div>
+        <div class="card-body">
+          <div class="chart-wrap"><canvas id="chart-fit"></canvas></div>
+        </div>
+      </div>
+
+      <!-- Source breakdown -->
+      <div class="card chart-card">
+        <div class="card-head"><h3>By Source</h3></div>
+        <div class="card-body">
+          <div class="chart-wrap"><canvas id="chart-source"></canvas></div>
+        </div>
+      </div>
+
+      <!-- Insights card -->
+      <div class="card span-2" id="insights-card" hidden>
+        <div class="card-head">
+          <h3>Learning Insights</h3>
+          <span class="muted small" id="insights-meta"></span>
+        </div>
+        <div class="card-body">
+          <div class="insights-grid">
+            <div>
+              <div class="muted small" style="font-weight:700;margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em">Top Missing Keywords</div>
+              <div class="keyword-cloud" id="insights-keywords"></div>
+              <div id="insights-advice" style="margin-top:12px;font-size:12.5px;display:none"></div>
+            </div>
+            <div>
+              <div class="readout" id="insights-stats"></div>
+              <div id="insights-blacklist" style="margin-top:12px"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /widgets-grid -->
+  </div><!-- /home-widgets -->
+
+</section>
+
+<!-- ── SEARCH & RUN ───────────────────────────────────────────────────────── -->
+<section class="tab" id="tab-search" hidden>
+  <div class="page-head">
+    <div>
+      <div class="page-title">Search &amp; Run</div>
+      <div class="page-sub">Configure search criteria and start an automated application run</div>
+    </div>
+    <div class="page-actions">
+      <button class="btn primary" id="btn-run">▶ Start Run</button>
+      <button class="btn" id="btn-save-search">💾 Save Search</button>
+    </div>
+  </div>
+
+  <div class="subnav" id="subnav-search">
+    <button class="snav-item active" data-sub="search">Search Setup</button>
+    <button class="snav-item" data-sub="live">
+      Live Log <span class="snav-badge live" id="live-badge" hidden>● live</span>
+    </button>
+    <button class="snav-item" data-sub="discovered">
+      Discovered <span class="snav-badge count" id="count-discovered">0</span>
+    </button>
+    <button class="snav-item" data-sub="resume">Resume</button>
+    <button class="snav-item" data-sub="errors">
+      Errors <span class="snav-badge err" id="sub-count-errors">0</span>
+    </button>
+  </div>
+
+  <!-- Search Setup sub -->
+  <div class="sub active" id="sub-search">
+    <div class="card no-lift">
+      <div class="card-head"><h3>Profile Validation</h3></div>
+      <div class="card-body">
+        <div id="profile-incomplete-banner" hidden>
+          <div class="banner warn">
+            <span class="banner-icon">⚠</span>
+            <div class="banner-body">
+              Profile incomplete — <a class="link" data-jump="profile">complete profile</a> to improve match quality.
+              <div class="missing-list" id="missing-list"></div>
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+          <div style="flex:1">
+            <div class="progress" style="margin-bottom:6px">
+              <div class="progress-bar" id="progress-bar-search" style="width:0%"></div>
+            </div>
+            <div class="muted small"><span id="completeness-pct-search">0</span>% complete</div>
+          </div>
+          <button class="btn tiny" onclick="renderValidity()">↺ Refresh</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card no-lift">
+      <div class="card-head">
+        <h3>Search &amp; Targets</h3>
+        <div style="display:flex;gap:8px">
+          <button class="btn tiny" id="btn-run2">▶ Run</button>
+          <button class="btn tiny ghost" id="btn-save-search2">💾 Save</button>
+        </div>
+      </div>
+      <div class="card-body" id="prefs-form-wrap">
+        <div class="muted small">Loading preferences…</div>
+      </div>
+    </div>
+
+    <!-- Gap analysis card -->
+    <div class="card no-lift" id="gap-card">
+      <div class="card-head"><h3>Resume Gap Analysis</h3></div>
+      <div class="card-body" id="gap-content"></div>
+    </div>
+  </div>
+
+  <!-- Live Log sub -->
+  <div class="sub" id="sub-live">
+    <div class="card no-lift" style="padding:0">
+      <div class="card-head">
+        <h3>Live Pipeline Log</h3>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="btn tiny" id="btn-clear-log">🗑 Clear</button>
+          <button class="btn tiny primary" id="btn-stream">▶ Connect</button>
+        </div>
+      </div>
+      <div class="log-wrap">
+        <div class="log-toolbar">
+          <span class="log-dot r"></span><span class="log-dot y"></span><span class="log-dot g"></span>
+          <span style="font-size:11px;color:var(--dim);margin-left:6px">pipeline output</span>
+        </div>
+        <div id="log"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Discovered sub -->
+  <div class="sub" id="sub-discovered">
+    <div class="page-head">
+      <div><div class="page-title">Discovered Jobs</div></div>
+      <div class="page-actions">
+        <button class="btn" onclick="loadDiscovered()">↺ Refresh</button>
+      </div>
+    </div>
+    <div id="discovered-table"><div class="empty"><div class="empty-icon">🔍</div><div class="empty-title">No discovered jobs yet</div><div class="empty-sub">Run a search to populate this list</div></div></div>
+  </div>
+
+  <!-- Resume sub -->
+  <div class="sub" id="sub-resume">
+    <div class="card no-lift" id="resume-card">
+      <div class="card-head"><h3>Resume &amp; Tailoring</h3></div>
+      <div class="card-body" id="resume-info-wrap">
+        <div class="muted small">Loading…</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Errors sub -->
+  <div class="sub" id="sub-errors">
+    <div class="page-head">
+      <div><div class="page-title">Pipeline Errors</div></div>
+      <div class="page-actions">
+        <button class="btn" onclick="loadErrors()">↺ Refresh</button>
+      </div>
+    </div>
+    <div id="errors-list"><div class="empty"><div class="empty-icon">✅</div><div class="empty-title">No errors logged</div></div></div>
+  </div>
+
+</section>
+
+<!-- ── APPLY ──────────────────────────────────────────────────────────────── -->
+<section class="tab" id="tab-apply" hidden>
+  <div class="page-head">
+    <div>
+      <div class="page-title">Apply</div>
+      <div class="page-sub">Review and submit ready-to-apply jobs</div>
+    </div>
+    <div class="page-actions">
+      <button class="btn" onclick="loadApplications('pending')">↺ Refresh</button>
+    </div>
+  </div>
+  <div id="pending-table"><div class="empty"><div class="empty-icon">⚡</div><div class="empty-title">No jobs pending review</div><div class="empty-sub">Run a search to queue jobs</div></div></div>
+</section>
+
+<!-- ── RECORDS ────────────────────────────────────────────────────────────── -->
+<section class="tab" id="tab-records" hidden>
+  <div class="page-head">
+    <div><div class="page-title">Records</div></div>
+    <div class="page-actions">
+      <button class="btn" onclick="loadApplications(currentRecordsSub)">↺ Refresh</button>
+    </div>
+  </div>
+
+  <div class="subnav" id="subnav-records">
+    <button class="snav-item active" data-sub="applied">
+      Applied <span class="snav-badge ok" id="count-applied-sub">0</span>
+    </button>
+    <button class="snav-item" data-sub="history">History</button>
+  </div>
+
+  <div class="sub active" id="sub-applied">
+    <div id="applied-table"><div class="empty"><div class="empty-icon">📋</div><div class="empty-title">No applications yet</div></div></div>
+  </div>
+
+  <div class="sub" id="sub-history">
+    <div id="history-content"><div class="muted small">Loading…</div></div>
+  </div>
+
+</section>
+
+<!-- ── DOCUMENTS ──────────────────────────────────────────────────────────── -->
+<section class="tab" id="tab-documents" hidden>
+  <div class="page-head">
+    <div>
+      <div class="page-title">Documents</div>
+      <div class="page-sub">Tailored resumes generated during application runs</div>
+    </div>
+    <div class="page-actions">
+      <button class="btn" onclick="loadDocuments()">↺ Refresh</button>
+    </div>
+  </div>
+  <div id="documents-list"><div class="muted small">Loading…</div></div>
+</section>
+
+<!-- ── PROFILE ────────────────────────────────────────────────────────────── -->
+<section class="tab" id="tab-profile" hidden>
+  <div class="page-head">
+    <div><div class="page-title">Profile</div><div class="page-sub">Your resume data, Q&amp;A answers, and showcase links</div></div>
+    <div class="page-actions">
+      <button class="btn primary" onclick="saveProfile()">💾 Save Profile</button>
+    </div>
+  </div>
+
+  <!-- Completeness inline card -->
+  <div class="card no-lift validity-card" id="profile-validity-card">
+    <div class="card-body" style="padding:14px 18px">
+      <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+        <div style="flex:1">
+          <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em">Profile Completeness</div>
+          <div class="progress"><div class="progress-bar" id="progress-bar-profile" style="width:0%"></div></div>
+        </div>
+        <div style="font-size:26px;font-weight:900;color:var(--accent);letter-spacing:-.04em" id="completeness-pct-profile">0%</div>
+      </div>
+      <div class="missing-list" id="missing-list-profile"></div>
+    </div>
+  </div>
+
+  <form id="profile-form" onsubmit="return false">
+
+    <!-- Personal Info -->
+    <div class="card no-lift" id="profile-section-personal">
+      <div class="card-head"><h3>Personal Information</h3></div>
+      <div class="card-body">
+        <div class="grid-2">
+          <div class="field"><label>First Name <span class="badge req">required</span></label><input type="text" name="first_name" placeholder="Jane" autocomplete="given-name"/></div>
+          <div class="field"><label>Last Name  <span class="badge req">required</span></label><input type="text" name="last_name" placeholder="Doe" autocomplete="family-name"/></div>
+          <div class="field"><label>Email <span class="badge req">required</span></label><input type="email" name="email" placeholder="jane@example.com" autocomplete="email"/></div>
+          <div class="field"><label>Phone</label><input type="tel" name="phone" placeholder="+1 555 000 0000" autocomplete="tel"/></div>
+          <div class="field"><label>City</label><input type="text" name="city" placeholder="San Francisco" autocomplete="address-level2"/></div>
+          <div class="field"><label>State / Province</label><input type="text" name="state" placeholder="CA"/></div>
+          <div class="field"><label>Country</label><input type="text" name="country" placeholder="United States" autocomplete="country-name"/></div>
+          <div class="field"><label>LinkedIn URL <span class="badge rec">recommended</span></label><input type="url" name="linkedin_url" placeholder="https://linkedin.com/in/…"/></div>
+          <div class="field span-2"><label>GitHub / Portfolio URL</label><input type="url" name="github_url" placeholder="https://github.com/…"/></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Work Authorization -->
+    <div class="card no-lift" id="profile-section-work_auth">
+      <div class="card-head"><h3>Work Authorization</h3></div>
+      <div class="card-body">
+        <div class="grid-2">
+          <div class="field"><label>Work Authorization</label>
+            <select name="work_authorization">
+              <option value="">Select…</option>
+              <option value="us_citizen">US Citizen</option>
+              <option value="us_green_card">Green Card / Permanent Resident</option>
+              <option value="us_h1b">H-1B Visa</option>
+              <option value="us_opt">OPT / CPT (F-1)</option>
+              <option value="other">Other (specify in notes)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Requires Sponsorship? <span class="badge req">required</span></label>
+            <div class="yn" data-group="requires_sponsorship">
+              <button type="button" class="no" data-val="false">No</button>
+              <button type="button" class="yes" data-val="true">Yes</button>
+            </div>
+          </div>
+          <div class="field">
+            <label>Open to Relocation?</label>
+            <div class="yn" data-group="open_to_relocation">
+              <button type="button" class="yes" data-val="true">Yes</button>
+              <button type="button" class="no" data-val="false">No</button>
+            </div>
+          </div>
+          <div class="field">
+            <label>Comfortable Remote?</label>
+            <div class="yn" data-group="comfortable_remote">
+              <button type="button" class="yes" data-val="true">Yes</button>
+              <button type="button" class="no" data-val="false">No</button>
+            </div>
+          </div>
+          <div class="field">
+            <label>US Veteran?</label>
+            <div class="yn" data-group="us_veteran">
+              <button type="button" class="no" data-val="false">No</button>
+              <button type="button" class="yes" data-val="true">Yes</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Resume upload -->
+    <div class="card no-lift" id="profile-section-resume">
+      <div class="card-head"><h3>Resume <span class="badge req">required</span></h3></div>
+      <div class="card-body">
+        <label class="dropzone" id="resume-dropzone">
+          <input type="file" name="resume_file" accept=".pdf,.docx,.doc,.txt" hidden id="resume-file-input"/>
+          <div class="dz-inner">
+            <div class="dz-icon">📄</div>
+            <div class="dz-text" id="resume-dz-text">Drop PDF/DOCX or click to browse</div>
+            <div class="dz-hint">PDF recommended · max 10 MB</div>
+          </div>
+        </label>
+      </div>
+    </div>
+
+    <!-- Summary / bio -->
+    <div class="card no-lift" id="profile-section-summary">
+      <div class="card-head"><h3>Professional Summary <span class="badge rec">recommended</span></h3></div>
+      <div class="card-body">
+        <div class="field">
+          <textarea name="summary" rows="5" placeholder="A 2–3 sentence professional bio used in cover letters and applications…"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <!-- Q&A bank -->
+    <div class="card no-lift" id="profile-section-qa">
+      <div class="card-head">
+        <h3>Q&amp;A Bank</h3>
+        <span class="muted small">Pre-fill common application questions</span>
+      </div>
+      <div class="card-body" id="qa-fields">
+        <div class="muted small">Loading Q&amp;A fields…</div>
+      </div>
+    </div>
+
+  </form>
+</section>
+
+<!-- ── SETTINGS ───────────────────────────────────────────────────────────── -->
+<section class="tab" id="tab-settings" hidden>
+  <div class="page-head">
+    <div><div class="page-title">Settings</div><div class="page-sub">Environment, API keys, and provider configuration</div></div>
+  </div>
+
+  <div class="settings-subnav">
+    <button class="stab-item active" data-stab="env">Environment</button>
+    <button class="stab-item" data-stab="health">API Health</button>
+    <button class="stab-item" data-stab="keytest">Key Test</button>
+    <button class="stab-item" data-stab="providers">Providers</button>
+    <button class="stab-item" data-stab="errors-stab">Errors</button>
+    <button class="stab-item" data-stab="usage">Usage</button>
+  </div>
+
+  <!-- Environment stab -->
+  <div class="stab active" id="stab-env">
+    <form id="settings-form" onsubmit="return false">
+      <div class="card no-lift">
+        <div class="card-head"><h3>LLM Provider</h3></div>
+        <div class="card-body">
+          <div class="provider-row" id="provider-picker">
+            <button type="button" class="provider-btn" data-provider="claude">
+              <div class="pv-name">Anthropic Claude</div>
+              <div class="pv-meta">claude-haiku / sonnet</div>
+              <span class="pv-tag pv-tag-best">Recommended</span>
+            </button>
+            <button type="button" class="provider-btn" data-provider="openai">
+              <div class="pv-name">OpenAI</div>
+              <div class="pv-meta">gpt-4o-mini / gpt-4o</div>
+            </button>
+            <button type="button" class="provider-btn" data-provider="gemini">
+              <div class="pv-name">Google Gemini</div>
+              <div class="pv-meta">gemini-2.5-flash</div>
+              <span class="pv-tag pv-tag-free">Free tier</span>
+            </button>
+          </div>
+
+          <div class="grid-2" style="margin-top:18px">
+            <div class="field"><label>Model Override (smart)</label><input type="text" name="LLM_MODEL" placeholder="leave blank for default"/></div>
+            <div class="field"><label>Model Override (cheap)</label><input type="text" name="LLM_MODEL_CHEAP" placeholder="leave blank for default"/></div>
+            <div class="field"><label>Smart-tier provider</label>
+              <select name="LLM_PROVIDER_SMART">
+                <option value="">Same as default</option>
+                <option value="claude">claude</option>
+                <option value="openai">openai</option>
+                <option value="gemini">gemini</option>
+              </select>
+            </div>
+            <div class="field"><label>Cheap-tier provider</label>
+              <select name="LLM_PROVIDER_CHEAP">
+                <option value="">Same as default</option>
+                <option value="claude">claude</option>
+                <option value="openai">openai</option>
+                <option value="gemini">gemini</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card no-lift">
+        <div class="card-head"><h3>API Keys</h3></div>
+        <div class="card-body">
+          <div class="grid-2">
+            <div class="field"><label>Anthropic API Key</label><input type="password" name="ANTHROPIC_API_KEY" placeholder="sk-ant-…" autocomplete="off"/></div>
+            <div class="field"><label>OpenAI API Key</label><input type="password" name="OPENAI_API_KEY" placeholder="sk-…" autocomplete="off"/></div>
+            <div class="field"><label>Gemini API Key</label><input type="password" name="GEMINI_API_KEY" placeholder="AIza…" autocomplete="off"/></div>
+            <div class="field"><label>Claude Budget (USD/run)</label><input type="number" name="CLAUDE_BUDGET_USD" step="0.01" min="0" placeholder="e.g. 0.50"/></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card no-lift">
+        <div class="card-head"><h3>Application Behavior</h3></div>
+        <div class="card-body">
+          <div class="grid-2">
+            <div class="field"><label>ATS Min Score (0–100)</label><input type="number" name="ATS_TARGET_MIN" min="0" max="100" placeholder="80"/></div>
+            <div class="field"><label>Max ATS Rewrites</label><input type="number" name="ATS_MAX_REWRITES" min="0" max="5" placeholder="1"/></div>
+            <div class="field"><label>Applier Mode</label>
+              <select name="APPLIER_MODE">
+                <option value="auto">Auto</option>
+                <option value="skyvern">Skyvern</option>
+                <option value="manual">Manual (pause)</option>
+              </select>
+            </div>
+            <div class="field"><label>Skyvern Base URL</label><input type="text" name="SKYVERN_BASE_URL" placeholder="http://localhost:8080"/></div>
+            <div class="field"><label>Skyvern API Key</label><input type="password" name="SKYVERN_API_KEY" placeholder="optional" autocomplete="off"/></div>
+          </div>
+          <div style="margin-top:14px;display:flex;flex-direction:column;gap:8px">
+            <label class="big-toggle">
+              <input type="checkbox" name="DRY_RUN"/>
+              <div><b>Dry Run (no real submissions)</b><div class="hint">Simulate the full pipeline without clicking Submit buttons.</div></div>
+            </label>
+            <label class="big-toggle">
+              <input type="checkbox" name="PAUSE_BEFORE_SUBMIT"/>
+              <div><b>Pause before each submit</b><div class="hint">Wait for manual confirmation on each job before applying.</div></div>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div class="card no-lift">
+        <div class="card-head"><h3>LinkedIn</h3></div>
+        <div class="card-body">
+          <div class="grid-2">
+            <div class="field"><label>LinkedIn Username / Email</label><input type="text" name="LINKEDIN_USERNAME" autocomplete="off"/></div>
+            <div class="field"><label>LinkedIn Password</label><input type="password" name="LINKEDIN_PASSWORD" autocomplete="off"/></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card no-lift">
+        <div class="card-head"><h3>Daily Limits</h3></div>
+        <div class="card-body">
+          <div class="grid-3">
+            <div class="field"><label>LinkedIn / day</label><input type="number" name="DAILY_LIMIT_LINKEDIN" min="1" max="100" placeholder="25"/></div>
+            <div class="field"><label>Indeed / day</label><input type="number" name="DAILY_LIMIT_INDEED" min="1" max="100" placeholder="25"/></div>
+            <div class="field"><label>Other / day</label><input type="number" name="DAILY_LIMIT_OTHER" min="1" max="100" placeholder="25"/></div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button type="button" class="btn primary" id="btn-save-settings">💾 Save Settings</button>
+        <button type="button" class="btn" id="btn-test-key">🔑 Test Key</button>
+        <div id="test-key-result" class="muted small" style="align-self:center"></div>
+      </div>
+    </form>
+  </div>
+
+  <!-- API Health stab -->
+  <div class="stab" id="stab-health">
+    <div class="page-head">
+      <div><div class="page-title">API Health</div></div>
+      <div class="page-actions"><button class="btn" onclick="loadHealth()">↺ Refresh</button></div>
+    </div>
+    <div class="provider-grid" id="health-cards">
+      <div class="muted small">Loading…</div>
+    </div>
+    <div style="margin-top:18px">
+      <div id="provider-toggles"></div>
+    </div>
+  </div>
+
+  <!-- Key Test stab -->
+  <div class="stab" id="stab-keytest">
+    <div class="card no-lift">
+      <div class="card-head"><h3>Live Key Test</h3></div>
+      <div class="card-body">
+        <p class="muted small" style="margin-bottom:14px">Send a real 1-token request to verify your current provider key is working.</p>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+          <button class="btn primary" id="btn-test-key-2">🔑 Test Current Key</button>
+          <div id="test-key-result-2" class="muted small" style="align-self:center"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Providers stab -->
+  <div class="stab" id="stab-providers">
+    <div class="page-head">
+      <div><div class="page-title">Provider Toggles</div></div>
+    </div>
+    <div id="provider-toggles-full"></div>
+  </div>
+
+  <!-- Errors stab -->
+  <div class="stab" id="stab-errors-stab">
+    <div class="page-head">
+      <div><div class="page-title">Pipeline Errors</div></div>
+      <div class="page-actions"><button class="btn" onclick="loadErrors()">↺ Refresh</button></div>
+    </div>
+    <div id="errors-list-settings"></div>
+  </div>
+
+  <!-- Usage stab -->
+  <div class="stab" id="stab-usage">
+    <div class="page-head">
+      <div><div class="page-title">API Usage</div></div>
+      <div class="page-actions"><button class="btn" onclick="loadUsage()">↺ Refresh</button></div>
+    </div>
+    <div id="usage-content"><div class="muted small">Loading…</div></div>
+  </div>
+
+</section>
+
+</main>
+</div><!-- /.layout -->
+
+<!-- Toast -->
+<div id="toast" class="toast" hidden></div>
+
+<!-- Scripts -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script src="{{ url_for('static', filename='charts.js') }}"></script>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+<script src="{{ url_for('static', filename='background.js') }}"></script>
+</body>
+</html>
