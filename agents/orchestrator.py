@@ -238,6 +238,7 @@ class Orchestrator:
             score_jobs=self.score_jobs,
             cache_path=cache_path,
             use_cache=self.use_cache,
+            limit=self.run_limit,
         )
         candidates = agent.discover()
 

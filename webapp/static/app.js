@@ -192,7 +192,7 @@ async function loadHomeCharts() {
 async function updateSidebarCompleteness() {
   try {
     const d = await api.get("/api/profile/validate");
-    const pct = Math.round((d.score || 0));
+    const pct = Math.round(d.completeness_pct || 0);
     const widget = $("#completeness-widget");
     if (!widget) return;
 
@@ -205,8 +205,8 @@ async function updateSidebarCompleteness() {
     if (pctEl) pctEl.textContent = pct + "%";
     if (barEl) barEl.style.width = pct + "%";
 
-    if (listEl && d.missing) {
-      const missing = d.missing.slice(0, 5);
+    if (listEl && d.missing_required) {
+      const missing = d.missing_required.slice(0, 5);
       listEl.innerHTML = missing.map(m =>
         `<span class="cw-chip" data-jump="${m.field_path || 'profile'}">${escapeHtml(m.label || m.field)}</span>`
       ).join("");
@@ -414,8 +414,6 @@ async function loadEnv() {
       form.elements["LINKEDIN_PASSWORD"].placeholder = e.linkedin_login_set ? "•••••••• (saved)" : "";
 
       // Behavior
-      form.elements["DRY_RUN"].checked = !!e.dry_run_default;
-      form.elements["PAUSE_BEFORE_SUBMIT"].checked = !!e.pause_before_submit;
       setVal(form, "DAILY_LIMIT_LINKEDIN", e.daily_limit_linkedin);
       setVal(form, "DAILY_LIMIT_INDEED",   e.daily_limit_indeed);
       setVal(form, "DAILY_LIMIT_OTHER",    e.daily_limit_other);
@@ -478,9 +476,6 @@ async function saveSettings() {
   // Only send Skyvern API key if the user typed something (don't blank the saved one)
   const sk = (form.elements["SKYVERN_API_KEY"]?.value ?? "").toString();
   if (sk) set["SKYVERN_API_KEY"] = sk;
-  set["DRY_RUN"] = form.elements["DRY_RUN"].checked ? "true" : "false";
-  set["PAUSE_BEFORE_SUBMIT"] = form.elements["PAUSE_BEFORE_SUBMIT"].checked ? "true" : "false";
-
   const res = await api.put("/api/env", { set });
   if (res.ok) {
     $("#settings-status").textContent = `Saved: ${res.written.join(", ") || "no changes"}`;
@@ -1114,13 +1109,10 @@ $("#btn-run").addEventListener("click", async () => {
   await api.put("/api/preferences", collectPreferences());
   const f = $("#search-form");
   const opts = {
-    dry_run:             f.elements["dry_run"].checked,
-    pause_before_submit: f.elements["pause_before_submit"].checked,
-    use_cache:           f.elements["use_cache"].checked,
-    do_research:         f.elements["research"].checked,
-    run_ats_check:       f.elements["ats_check"].checked,
-    headless:            f.elements["headless"].checked,
-    limit:               Number(getVal(f, "limit") || 10),
+    use_cache:     f.elements["use_cache"].checked,
+    do_research:   f.elements["research"].checked,
+    run_ats_check: f.elements["ats_check"].checked,
+    limit:         Number(getVal(f, "limit") || 0) || null,
     min_ats:             Number(getVal(f, "min_ats") || 0),
     score_jobs:          f.elements["fit_enabled"].checked,
   };
@@ -1164,7 +1156,7 @@ function startEventStream() {
       } else {
         setRunnerDot("running", true);
         setStopButtonVisible(true);
-        $("#badge-live").hidden = false;
+        $("#nav-badge-live").hidden = false;
       }
     } catch {}
   };

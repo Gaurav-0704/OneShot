@@ -43,12 +43,14 @@ class DiscoveryAgent(Agent):
         score_jobs: bool = True,
         cache_path: Path | None = None,
         use_cache: bool = False,
+        limit: int | None = None,
     ):
         super().__init__(profile=profile, dry_run=True)
         self.applied_csv = applied_csv
         self.score_jobs = score_jobs
         self.cache_path = cache_path
         self.use_cache = use_cache
+        self.limit = limit
         # Side-effect: full scored list (above + below threshold) so the
         # orchestrator can persist a snapshot for the Discovered tab.
         self.all_scored: list[dict] = []
@@ -94,7 +96,7 @@ class DiscoveryAgent(Agent):
                 )
 
         self.info(f"sites={prefs.get('sites')} terms={prefs.get('search_terms')}")
-        df = scrape(prefs)
+        df = scrape(prefs, limit=self.limit)
         if df.empty:
             self.warn("no jobs scraped")
             self.all_scored = []

@@ -76,6 +76,11 @@
       <span class="nav-badge err" id="count-errors" hidden>0</span>
     </button>
 
+    <!-- hidden counter sinks used by JS -->
+    <span id="count-failed" hidden></span>
+    <span id="count-health" hidden></span>
+    <span id="count-resume" hidden></span>
+
   </nav>
 
   <!-- Footer: completeness + status -->
@@ -265,6 +270,7 @@
             <span class="banner-icon">⚠</span>
             <div class="banner-body">
               Profile incomplete — <a class="link" data-jump="profile">complete profile</a> to improve match quality.
+              <span id="banner-missing-summary"></span>
               <div class="missing-list" id="missing-list"></div>
             </div>
           </div>
@@ -290,14 +296,160 @@
         </div>
       </div>
       <div class="card-body" id="prefs-form-wrap">
-        <div class="muted small">Loading preferences…</div>
+        <form id="search-form" onsubmit="return false">
+
+          <!-- Search terms & location -->
+          <div class="grid-2" style="margin-bottom:16px">
+            <div class="field">
+              <label>Job Titles / Search Terms</label>
+              <textarea name="search_terms" rows="4" placeholder="Software Engineer&#10;Backend Engineer&#10;Data Engineer"></textarea>
+              <div class="field-hint">One per line. Used verbatim on each job board.</div>
+            </div>
+            <div class="field">
+              <label>Locations</label>
+              <textarea name="locations" rows="4" placeholder="San Francisco, CA&#10;Remote&#10;New York, NY"></textarea>
+              <div class="field-hint">One per line. Leave blank to search everywhere.</div>
+            </div>
+          </div>
+
+          <!-- Work type -->
+          <div class="field" style="margin-bottom:14px">
+            <label>Work Type</label>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:4px">
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:500;text-transform:none;letter-spacing:0;color:var(--text)"><input type="checkbox" name="remote"> Remote</label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:500;text-transform:none;letter-spacing:0;color:var(--text)"><input type="checkbox" name="hybrid"> Hybrid</label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:500;text-transform:none;letter-spacing:0;color:var(--text)"><input type="checkbox" name="onsite"> On-site</label>
+            </div>
+          </div>
+
+          <!-- Experience & job type -->
+          <div class="grid-2" style="margin-bottom:14px">
+            <div class="field">
+              <label>Experience Level</label>
+              <select name="experience_level">
+                <option value="internship">Internship</option>
+                <option value="entry_level">Entry level</option>
+                <option value="associate">Associate</option>
+                <option value="mid_senior_level">Mid / Senior</option>
+                <option value="director">Director</option>
+                <option value="executive">Executive</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Job Types</label>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">
+                <label style="display:flex;align-items:center;gap:5px;font-size:13px;font-weight:500;text-transform:none;letter-spacing:0;color:var(--text)"><input type="checkbox" name="job_fulltime"> Full-time</label>
+                <label style="display:flex;align-items:center;gap:5px;font-size:13px;font-weight:500;text-transform:none;letter-spacing:0;color:var(--text)"><input type="checkbox" name="job_parttime"> Part-time</label>
+                <label style="display:flex;align-items:center;gap:5px;font-size:13px;font-weight:500;text-transform:none;letter-spacing:0;color:var(--text)"><input type="checkbox" name="job_contract"> Contract</label>
+                <label style="display:flex;align-items:center;gap:5px;font-size:13px;font-weight:500;text-transform:none;letter-spacing:0;color:var(--text)"><input type="checkbox" name="job_internship"> Internship</label>
+                <label style="display:flex;align-items:center;gap:5px;font-size:13px;font-weight:500;text-transform:none;letter-spacing:0;color:var(--text)"><input type="checkbox" name="job_temporary"> Temporary</label>
+              </div>
+            </div>
+          </div>
+
+          <!-- Job boards -->
+          <div class="field" style="margin-bottom:14px">
+            <label>Job Boards</label>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:4px">
+              <label style="display:flex;align-items:center;gap:5px;font-size:13px;font-weight:500;text-transform:none;letter-spacing:0;color:var(--text)"><input type="checkbox" name="site_linkedin"> LinkedIn</label>
+              <label style="display:flex;align-items:center;gap:5px;font-size:13px;font-weight:500;text-transform:none;letter-spacing:0;color:var(--text)"><input type="checkbox" name="site_indeed"> Indeed</label>
+              <label style="display:flex;align-items:center;gap:5px;font-size:13px;font-weight:500;text-transform:none;letter-spacing:0;color:var(--text)"><input type="checkbox" name="site_glassdoor"> Glassdoor</label>
+              <label style="display:flex;align-items:center;gap:5px;font-size:13px;font-weight:500;text-transform:none;letter-spacing:0;color:var(--text)"><input type="checkbox" name="site_zip"> ZipRecruiter</label>
+              <label style="display:flex;align-items:center;gap:5px;font-size:13px;font-weight:500;text-transform:none;letter-spacing:0;color:var(--text)"><input type="checkbox" name="site_google"> Google Jobs</label>
+            </div>
+          </div>
+
+          <!-- Filters -->
+          <div class="grid-2" style="margin-bottom:14px">
+            <div class="field">
+              <label>Date Posted</label>
+              <select name="date_posted">
+                <option value="today">Today</option>
+                <option value="3days">Last 3 days</option>
+                <option value="week">Last week</option>
+                <option value="month">Last month</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Results per Site</label>
+              <input type="number" name="results_per_site" min="5" max="200" placeholder="25"/>
+            </div>
+            <div class="field">
+              <label>Distance (miles)</label>
+              <input type="number" name="distance_miles" min="0" max="500" placeholder="50"/>
+            </div>
+            <div class="field">
+              <label>Min Salary (USD / year)</label>
+              <input type="number" name="min_salary" min="0" step="1000" placeholder="0"/>
+            </div>
+          </div>
+
+          <!-- LLM fit scoring -->
+          <div style="border:1px solid var(--glass-border);border-radius:var(--r-sm);padding:14px 16px;margin-bottom:14px;background:var(--glass)">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:10px">
+              <input type="checkbox" name="fit_enabled">
+              <span style="font-size:13px;font-weight:700;color:var(--text)">LLM Fit Scoring</span>
+              <span class="pill muted" style="font-size:10px">cheap tier</span>
+            </label>
+            <div class="field">
+              <label>Minimum Fit Score (1–10)</label>
+              <input type="number" name="min_fit_score" min="1" max="10" placeholder="6"/>
+              <div class="field-hint">Jobs scoring below this are shown in Discovered but not tailored.</div>
+            </div>
+          </div>
+
+          <!-- Suggest from resume -->
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
+            <button type="button" class="btn tiny" id="btn-suggest-terms">✨ Suggest from Resume</button>
+            <span class="muted small" id="suggest-terms-status"></span>
+          </div>
+
+          <!-- Blacklists -->
+          <details style="margin-bottom:4px">
+            <summary style="cursor:pointer;font-size:13px;font-weight:700;color:var(--muted);padding:6px 0;user-select:none">Blacklists</summary>
+            <div style="padding-top:10px;display:flex;flex-direction:column;gap:10px">
+              <div class="field">
+                <label>Blacklisted Titles</label>
+                <input type="text" name="title_blacklist" placeholder="manager, director, VP (comma-separated)"/>
+              </div>
+              <div class="field">
+                <label>Blacklisted Companies</label>
+                <input type="text" name="company_blacklist" placeholder="Company A, Company B"/>
+              </div>
+              <div class="field">
+                <label>Blacklisted Description Keywords</label>
+                <input type="text" name="desc_blacklist" placeholder="blockchain, gambling"/>
+              </div>
+            </div>
+          </details>
+
+          <details class="field-group">
+            <summary>Run options</summary>
+            <div class="field-grid">
+              <div class="field">
+                <label>Max applications to tailor <span class="muted small">(blank = all)</span></label>
+                <input type="number" name="limit" min="1" max="500" placeholder="e.g. 5"/>
+              </div>
+              <label class="checkbox-label"><input type="checkbox" name="ats_check" checked/> Run ATS rewrite loop</label>
+              <label class="checkbox-label"><input type="checkbox" name="research"/> Research company before writing</label>
+              <label class="checkbox-label"><input type="checkbox" name="use_cache"/> Use cached discovery (skip re-scraping)</label>
+            </div>
+          </details>
+
+        </form>
       </div>
     </div>
 
     <!-- Gap analysis card -->
     <div class="card no-lift" id="gap-card">
-      <div class="card-head"><h3>Resume Gap Analysis</h3></div>
-      <div class="card-body" id="gap-content"></div>
+      <div class="card-head">
+        <h3>Resume Gap Analysis</h3>
+        <span class="muted small" id="gap-meta"></span>
+      </div>
+      <div class="card-body" id="gap-content">
+        <div class="keyword-cloud" id="gap-keywords"></div>
+        <div id="gap-advice" style="margin-top:10px;font-size:12.5px;color:var(--muted)"></div>
+      </div>
     </div>
   </div>
 
@@ -308,6 +460,7 @@
         <h3>Live Pipeline Log</h3>
         <div style="display:flex;gap:8px;align-items:center">
           <button class="btn tiny" id="btn-clear-log">🗑 Clear</button>
+          <button class="btn tiny danger" id="btn-stop-pipeline" hidden>⏹ Stop</button>
           <button class="btn tiny primary" id="btn-stream">▶ Connect</button>
         </div>
       </div>
@@ -414,7 +567,8 @@
   <div class="page-head">
     <div><div class="page-title">Profile</div><div class="page-sub">Your resume data, Q&amp;A answers, and showcase links</div></div>
     <div class="page-actions">
-      <button class="btn primary" onclick="saveProfile()">💾 Save Profile</button>
+      <button class="btn ghost" id="btn-reload-profile">↺ Reload</button>
+      <button class="btn primary" id="btn-save-profile">💾 Save Profile</button>
     </div>
   </div>
 
@@ -501,16 +655,23 @@
 
     <!-- Resume upload -->
     <div class="card no-lift" id="profile-section-resume">
-      <div class="card-head"><h3>Resume <span class="badge req">required</span></h3></div>
+      <div class="card-head">
+        <h3>Resume <span class="badge req">required</span></h3>
+        <div style="display:flex;gap:8px">
+          <button type="button" class="btn tiny" id="btn-parse-resume">↺ Extract to Profile</button>
+          <button type="button" class="btn tiny ghost" id="btn-parse-resume-overwrite">Overwrite All</button>
+        </div>
+      </div>
       <div class="card-body">
-        <label class="dropzone" id="resume-dropzone">
-          <input type="file" name="resume_file" accept=".pdf,.docx,.doc,.txt" hidden id="resume-file-input"/>
+        <label class="dropzone" id="dropzone">
+          <input type="file" name="resume_file" accept=".pdf,.docx,.doc,.txt" hidden id="resume-file"/>
           <div class="dz-inner">
             <div class="dz-icon">📄</div>
             <div class="dz-text" id="resume-dz-text">Drop PDF/DOCX or click to browse</div>
             <div class="dz-hint">PDF recommended · max 10 MB</div>
           </div>
         </label>
+        <div id="parse-status" class="muted small" style="margin-top:8px"></div>
       </div>
     </div>
 
@@ -627,16 +788,6 @@
             <div class="field"><label>Skyvern Base URL</label><input type="text" name="SKYVERN_BASE_URL" placeholder="http://localhost:8080"/></div>
             <div class="field"><label>Skyvern API Key</label><input type="password" name="SKYVERN_API_KEY" placeholder="optional" autocomplete="off"/></div>
           </div>
-          <div style="margin-top:14px;display:flex;flex-direction:column;gap:8px">
-            <label class="big-toggle">
-              <input type="checkbox" name="DRY_RUN"/>
-              <div><b>Dry Run (no real submissions)</b><div class="hint">Simulate the full pipeline without clicking Submit buttons.</div></div>
-            </label>
-            <label class="big-toggle">
-              <input type="checkbox" name="PAUSE_BEFORE_SUBMIT"/>
-              <div><b>Pause before each submit</b><div class="hint">Wait for manual confirmation on each job before applying.</div></div>
-            </label>
-          </div>
         </div>
       </div>
 
@@ -665,6 +816,7 @@
         <button type="button" class="btn primary" id="btn-save-settings">💾 Save Settings</button>
         <button type="button" class="btn" id="btn-test-key">🔑 Test Key</button>
         <div id="test-key-result" class="muted small" style="align-self:center"></div>
+        <span id="settings-status" class="muted small" style="align-self:center"></span>
       </div>
     </form>
   </div>
@@ -673,7 +825,10 @@
   <div class="stab" id="stab-health">
     <div class="page-head">
       <div><div class="page-title">API Health</div></div>
-      <div class="page-actions"><button class="btn" onclick="loadHealth()">↺ Refresh</button></div>
+      <div class="page-actions">
+        <button class="btn" onclick="loadHealth()">↺ Refresh</button>
+        <button class="btn primary" id="btn-test-all">🔑 Test All Keys</button>
+      </div>
     </div>
     <div class="provider-grid" id="health-cards">
       <div class="muted small">Loading…</div>

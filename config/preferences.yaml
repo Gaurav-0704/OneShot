@@ -22,10 +22,6 @@ distance_miles: 50
 results_per_site: 25
 sites:
 - linkedin
-- indeed
-- glassdoor
-- zip_recruiter
-- google
 country_indeed: usa
 blacklists:
   title_keywords:
@@ -42,4 +38,4 @@ salary:
   desired_usd_annual: 100000
 fit_score:
   enabled: true
-  min_score: 6
+  min_score: 5
