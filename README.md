@@ -11,7 +11,25 @@ python run.py run      # CLI, dry-run by default
 
 ---
 
-## What makes this different
+## ★ What makes this different from every other job bot
+
+> **Most job bots mass-blast one generic resume and hope for replies. OneShot is a quality-control pipeline that writes a unique, ATS-optimised resume and cover letter per job, checks the score, rewrites until it passes, and only then hands it to you.**
+
+| Feature | Typical job bots | OneShot |
+|---|---|---|
+| Resume tailoring | One generic resume sent everywhere | Unique resume per job, rewritten with job-specific keywords |
+| ATS optimisation | None | Score → rewrite loop until target ATS score is met |
+| LLM cost control | None / one provider | Gemini (free) → Claude (quality) → OpenAI fallback, auto-switches on rate-limit |
+| Output | Submits silently in background | You review every application; you click Submit |
+| Data privacy | Cloud/subscription service | 100% local — all data stays on your machine |
+| Fit filtering | Keyword match only | LLM scores each job 1–10 against your actual resume; configurable threshold |
+| JSON reliability | Crashes on bad LLM output | 4-stage repair: parse → extract → escape → regex salvage |
+
+The core differentiator is the **ATS feedback loop** (point 1 below). The benchmark shows it lifts average ATS scores by +16 points and moves 3× more applications past the target threshold vs single-pass generation.
+
+---
+
+## What makes this different — in depth
 
 Most job-bot projects stop at "scrape jobs and autofill forms." This one treats the problem as a quality-control pipeline, not a fire-and-forget script.
 
@@ -60,10 +78,10 @@ Everything runs on your machine. No account, no cloud sync, no rate limits from 
 
 ### 5. Safe by default
 
-- **Dry-run on**: the first run generates all documents and walks every form, but doesn't click Submit.
-- **Pause before submit**: even with dry-run off, the bot stops and waits for your confirmation on each job.
+- **Review-first handoff**: the pipeline writes every document and stops. You open the ready-to-apply record in your browser and click Submit yourself. Nothing is submitted on your behalf.
 - **Daily caps per platform**: hit the cap and the run stops. Keeps accounts from getting flagged.
 - **Already-applied dedupe**: `applied_jobs.csv` is read at startup; known job IDs are skipped.
+- **Duplicate suppression**: the same job posting at two locations is deduplicated before tailoring so you don't waste LLM calls on the same listing twice.
 
 ---
 
@@ -196,11 +214,10 @@ LearnerAgent    post-run: gap analysis, promote learned Q&A answers
 ```
 python run.py                       open the web UI
 python run.py serve                 same
-python run.py run                   run the pipeline (dry-run by default)
-python run.py run --no-dry-run      actually submit applications
-python run.py run --limit 5         cap this run to 5 jobs
+python run.py run                   run the pipeline; outputs go to pending_review.csv
+python run.py run --limit 5         cap this run to 5 tailored applications
 python run.py run --no-score        skip LLM scoring (faster, cheaper)
-python run.py run --site linkedin   restrict to one platform
+python run.py run --site linkedin   restrict discovery to one platform
 python run.py profile               print the assembled profile, no scraping
 python run.py status                today / lifetime counts
 python run.py history --limit 20    last N applied jobs

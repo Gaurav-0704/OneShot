@@ -363,12 +363,15 @@
           <div class="grid-2" style="margin-bottom:14px">
             <div class="field">
               <label>Date Posted</label>
-              <select name="date_posted">
-                <option value="today">Today</option>
-                <option value="3days">Last 3 days</option>
-                <option value="week">Last week</option>
-                <option value="month">Last month</option>
-              </select>
+              <input type="hidden" name="date_posted" value="week"/>
+              <div class="pill-row" id="date-posted-pills">
+                <button type="button" class="pill" data-val="6_hours">6h</button>
+                <button type="button" class="pill" data-val="12_hours">12h</button>
+                <button type="button" class="pill" data-val="24_hours">24h</button>
+                <button type="button" class="pill" data-val="48_hours">48h</button>
+                <button type="button" class="pill active" data-val="week">1 week</button>
+                <button type="button" class="pill" data-val="month">1 month</button>
+              </div>
             </div>
             <div class="field">
               <label>Results per Site</label>

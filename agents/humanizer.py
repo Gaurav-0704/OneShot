@@ -68,12 +68,23 @@ class HumanizerAgent(Agent):
         if app.cover_letter_text:
             result = deliver(app.cover_letter_text, kind="cover", facts=facts)
             app.cover_letter_text = result["text"]
+            # If salutation or sign-off are missing, inject them rather than
+            # just flagging — LLMs reliably skip these despite prompt instructions.
+            issues = result["report"].get("issues", [])
+            cl = app.cover_letter_text
+            if any("salutation" in i for i in issues):
+                cl = "Dear Hiring Manager,\n\n" + cl
+            if any("sign-off" in i for i in issues):
+                name = getattr(profile, "full_name", "") or ""
+                cl = cl.rstrip() + f"\n\nSincerely,\n{name}" if name else cl.rstrip() + "\n\nSincerely,"
+            app.cover_letter_text = cl
             if not result["report"]["ok"]:
-                n_issues += 1
-                log.warning(
-                    f"humanizer: cover issues for {app.company}: "
-                    f"{result['report']['issues']}"
-                )
+                remaining = [i for i in issues if "salutation" not in i and "sign-off" not in i]
+                if remaining:
+                    n_issues += 1
+                    log.warning(
+                        f"humanizer: cover issues for {app.company}: {remaining}"
+                    )
             if app.cover_letter_pdf and app.folder:
                 try:
                     from core.pdf_generator import generate_cover_letter_pdf

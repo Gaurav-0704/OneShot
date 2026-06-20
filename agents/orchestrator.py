@@ -115,6 +115,22 @@ class Orchestrator:
             reverse=True,
         )
 
+        # Dedup by (title, company) — same job sometimes appears with two
+        # location strings (e.g. "Remote" and "Worldwide") and both survive
+        # the scraper's location-aware dedup. Keep the first (highest-scored).
+        seen_jobs: set[tuple[str, str]] = set()
+        unique: list[JobApplication] = []
+        for a in candidates:
+            key = (a.title.lower().strip(), a.company.lower().strip())
+            if key not in seen_jobs:
+                seen_jobs.add(key)
+                unique.append(a)
+            else:
+                log.info(f"dedup: dropping duplicate '{a.title} @ {a.company}' ({a.location})")
+        if len(unique) < len(candidates):
+            log.info(f"dedup removed {len(candidates) - len(unique)} duplicate(s); {len(unique)} remain")
+        candidates = unique
+
         tailor_top_n = int(os.environ.get("TAILOR_TOP_N", "0") or 0)
         if tailor_top_n > 0:
             log.info(

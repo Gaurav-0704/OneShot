@@ -132,9 +132,17 @@ def scrape(prefs: dict[str, Any], limit: Optional[int] = None) -> pd.DataFrame:
     distance    = int(prefs.get("distance_miles", 50))
     country     = prefs.get("country_indeed", "usa")
     date_filter = prefs.get("date_posted", "week")
-    hours_old   = {"24_hours": 24, "week": 168, "month": 720, "all_time": None}.get(
-        date_filter, 168
-    )
+    hours_old   = {
+        "6_hours":  6,
+        "12_hours": 12,
+        "24_hours": 24,
+        "48_hours": 48,
+        "today":    24,   # legacy value from old UI
+        "3days":    72,   # legacy value from old UI
+        "week":    168,
+        "month":   720,
+        "all_time": None,
+    }.get(date_filter, 168)
 
     work = [(term, loc) for term in terms for loc in locations]
     frames: list[pd.DataFrame] = []

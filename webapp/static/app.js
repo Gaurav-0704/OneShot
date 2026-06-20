@@ -972,6 +972,25 @@ function getVal(form, name) {
   return el.value;
 }
 
+// ── Date-posted pill picker ──────────────────────────────────────────────
+
+function setDatePosted(val) {
+  const f = $("#search-form");
+  if (!f) return;
+  setVal(f, "date_posted", val);
+  $$("#date-posted-pills .pill").forEach(p => {
+    p.classList.toggle("active", p.dataset.val === val);
+  });
+}
+
+(function bindDatePills() {
+  document.addEventListener("click", e => {
+    const pill = e.target.closest("#date-posted-pills .pill");
+    if (!pill) return;
+    setDatePosted(pill.dataset.val);
+  });
+})();
+
 // ── Preferences (Search & Run) ───────────────────────────────────────────
 
 async function loadPreferences() {
@@ -990,7 +1009,7 @@ async function loadPreferences() {
     f.elements["job_contract"].checked   = jts.has("contract");
     f.elements["job_internship"].checked = jts.has("internship");
     f.elements["job_temporary"].checked  = jts.has("temporary");
-    setVal(f, "date_posted", p.date_posted || "week");
+    setDatePosted(p.date_posted || "week");
     setVal(f, "distance_miles", p.distance_miles || 50);
     setVal(f, "results_per_site", p.results_per_site || 25);
     const sites = new Set(p.sites || []);
