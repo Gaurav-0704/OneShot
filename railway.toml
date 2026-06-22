@@ -1,0 +1,7 @@
+[build]
+builder = "nixpacks"
+
+[deploy]
+startCommand = "python run.py serve --host 0.0.0.0 --port $PORT --no-browser"
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3

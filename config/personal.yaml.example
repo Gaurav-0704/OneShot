@@ -1,0 +1,49 @@
+# Copy this file to personal.yaml and fill in your details.
+# Or use the Profile tab in the web UI to fill this in.
+
+name:
+  first: "Alex"
+  last: "Morgan"
+
+contact:
+  email: "alex.morgan@email.com"
+  phone: "+1 555 000 0000"
+  linkedin: "https://linkedin.com/in/alexmorgan"
+  github: "https://github.com/alexmorgan"
+  portfolio: ""
+
+location:
+  city: "San Francisco"
+  state: "CA"
+  country: "USA"
+  willing_to_relocate: false
+
+experience:
+  years: 3
+  current_title: "Software Engineer"
+  desired_titles:
+    - "Software Engineer"
+    - "Backend Engineer"
+    - "ML Engineer"
+
+work_authorization:
+  authorized_us: true
+  requires_sponsorship: false
+  authorized_uk: false
+  authorized_eu: false
+  authorized_canada: false
+
+compensation:
+  desired_salary_usd: 130000
+
+demographics:
+  gender: ""
+  ethnicity: ""
+  veteran_status: "I am not a veteran"
+  disability_status: "I don't wish to answer"
+
+education:
+  degree: "Bachelor of Science"
+  field: "Computer Science"
+  university: "State University"
+  graduation_year: 2021

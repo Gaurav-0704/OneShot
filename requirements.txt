@@ -15,7 +15,7 @@ regex>=2024.4.28
 # --- LLM clients ---
 anthropic>=0.40.0              # Claude (default)
 openai>=1.40.0                 # OpenAI / DeepSeek (optional)
-google-generativeai>=0.8.0     # Gemini (optional, has free tier)
+google-genai>=1.0.0            # Gemini (official new SDK)
 
 # --- Document parsing & generation ---
 pdfplumber>=0.11.0

@@ -3,8 +3,9 @@
 *.env
 !.env.example
 
-# ── Personal data / PII (each user provides their own) ─────────────────
-config/personal.yaml
+# ── Personal data / PII ────────────────────────────────────────────────
+# personal.yaml is committed so Railway deployments work without setup.
+# master_resume.pdf is fetched at startup via RESUME_URL env var.
 config/questions.yaml
 config/master_resume.pdf
 config/showcase.pdf
@@ -12,7 +13,9 @@ config/reference/
 config/_backup_*/
 
 # ── Generated output (resumes, cover letters, tracking, run state) ─────
-outputs/
+# Keep the folder structure but ignore all generated content
+outputs/**
+!outputs/.gitkeep
 
 # ── Python ─────────────────────────────────────────────────────────────
 __pycache__/

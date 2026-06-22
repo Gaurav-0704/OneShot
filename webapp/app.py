@@ -20,7 +20,40 @@ from webapp.routes.history import bp as history_bp
 from webapp.routes.pipeline import bp as pipeline_bp
 
 
+def _bootstrap_resume(root: Path) -> None:
+    """Download master_resume.pdf from RESUME_URL env var if not present.
+
+    Set RESUME_URL in Railway env vars to a public direct-download link
+    (Google Drive, Dropbox, GitHub raw, etc.) so the resume is available
+    without committing a PDF to the repo.
+    """
+    import os
+    resume_path = root / "config" / "master_resume.pdf"
+    if resume_path.exists():
+        return
+    url = os.environ.get("RESUME_URL", "").strip()
+    if not url:
+        logging.getLogger(__name__).warning(
+            "config/master_resume.pdf not found and RESUME_URL not set. "
+            "Upload a resume via the Profile tab or set RESUME_URL in Railway env vars."
+        )
+        return
+    try:
+        import urllib.request
+        logging.getLogger(__name__).info(f"Downloading resume from RESUME_URL ...")
+        urllib.request.urlretrieve(url, resume_path)
+        logging.getLogger(__name__).info(f"Resume saved to {resume_path}")
+    except Exception as e:
+        logging.getLogger(__name__).error(f"Failed to download resume: {e}")
+
+
 def create_app(root: Path) -> Flask:
+    # Ensure output directories exist on a fresh deployment
+    for d in ["outputs", "outputs/logs", "outputs/tailored", "config"]:
+        (root / d).mkdir(parents=True, exist_ok=True)
+
+    _bootstrap_resume(root)
+
     app = Flask(
         __name__,
         template_folder=str(Path(__file__).parent / "templates"),

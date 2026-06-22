@@ -1,0 +1,26 @@
+name:
+  first: Gaurav Singh
+  middle: Singh
+  last: Thakur
+contact:
+  email: ***REMOVED***
+  phone: +1 9375204001
+  linkedin: https://***REMOVED***
+  github: https://github.com/Gaurav-0704
+  website: https://gst-portfolio.vercel.app/
+address:
+  city: Dayton
+  state: Ohio
+  zipcode: '45410'
+  country: United States
+demographics:
+  gender: Male
+  ethnicity: Asian
+  veteran_status: I am not a veteran
+  disability_status: No, I don't have a disability
+work_authorization:
+  us: 'Yes'
+  eu: 'No'
+  uk: 'No'
+  canada: 'No'
+  requires_sponsorship: 'Yes'
