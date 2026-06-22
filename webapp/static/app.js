@@ -373,7 +373,18 @@ async function loadEnv() {
     const keyName  = e.llm_provider === "claude" ? "anthropic_key_set" :
                      e.llm_provider === "openai" ? "openai_key_set"     : "gemini_key_set";
     const keyOk    = e[keyName];
-    $("#env-line").textContent = `${provider}  ${keyOk ? "✓ key" : "⚠ no key"}`;
+    const envEl    = $("#env-line");
+    if (keyOk) {
+      envEl.textContent = `${provider}  ✓ key`;
+      envEl.style.color = "";
+      envEl.style.cursor = "";
+      envEl.onclick = null;
+    } else {
+      envEl.innerHTML = `⚠ No API key — <u style="cursor:pointer">add in Settings</u>`;
+      envEl.style.color = "var(--warn, #f5a623)";
+      envEl.style.cursor = "pointer";
+      envEl.onclick = () => switchTab("settings");
+    }
 
     // Settings form (only if it exists — settings tab may be hidden)
     const form = $("#settings-form");
@@ -710,11 +721,15 @@ async function uploadResume(file) {
 }
 
 async function parseResumeAndFill(overwrite) {
-  $("#parse-status").textContent = "Reading resume with Claude…";
+  $("#parse-status").textContent = "Reading resume with AI…";
   const res = await api.post("/api/profile/parse-resume", { overwrite });
   if (!res.ok) {
     $("#parse-status").textContent = "";
-    toast("Parse failed: " + (res.error || ""), "err");
+    const err = res.error || "";
+    const msg = err.includes("No usable LLM provider")
+      ? "No API key found — go to Settings tab and add your Gemini or Claude key first."
+      : "Parse failed: " + err;
+    toast(msg, "err");
     return;
   }
   $("#parse-status").textContent = `wrote ${res.written?.length || 0} fields, kept ${res.skipped_existing?.length || 0} existing`;
@@ -868,7 +883,9 @@ async function renderValidity() {
   const barEl = $("#progress-bar-search");
   if (barEl) barEl.style.width = `${pct}%`;
 
-  // Profile tab bar
+  // Profile tab bar — hide entire card when 100% complete
+  const profileCard = $("#profile-validity-card");
+  if (profileCard) profileCard.hidden = (pct >= 100);
   const profilePct = $("#completeness-pct-profile");
   if (profilePct) profilePct.textContent = `${pct}%`;
   const profileBar = $("#progress-bar-profile");
