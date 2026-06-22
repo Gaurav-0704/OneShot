@@ -690,61 +690,102 @@ function getYN(name) {
 
 // ── Resume upload + parse ────────────────────────────────────────────────
 
+function _setDzState(hasResume, filename, sizeKb) {
+  // Update both the profile dropzone and the home dropzone
+  const name   = $("#dz-name");
+  const meta   = $("#dz-meta");
+  const dz     = $("#dropzone");
+  const hName  = $("#home-dz-name");
+  const hMeta  = $("#home-dz-meta");
+  const hDz    = $("#home-dropzone");
+
+  if (hasResume) {
+    const label = filename ? `✓ ${filename}` : "✓ Resume on file";
+    const hint  = sizeKb   ? `${sizeKb} KB · click to replace` : "click to replace, or drag a new one";
+    if (name) name.textContent = label;
+    if (meta) meta.textContent = hint;
+    if (dz)   dz.classList.add("ok-have");
+    if (hName) hName.textContent = label;
+    if (hMeta) hMeta.textContent = hint;
+    if (hDz)  { hDz.style.borderColor = "var(--green,#4caf50)"; hDz.style.borderStyle = "solid"; }
+  } else {
+    if (name) name.textContent = "Drop PDF / DOCX here or click to browse";
+    if (meta) meta.textContent = "PDF recommended · max 10 MB";
+    if (dz)   dz.classList.remove("ok-have");
+    if (hName) hName.textContent = "Upload your resume to get started";
+    if (hMeta) hMeta.textContent = "PDF / DOCX · click or drag here";
+    if (hDz)  { hDz.style.borderColor = ""; hDz.style.borderStyle = ""; }
+  }
+}
+
 async function refreshResumeStatus() {
-  // Just check if config/master_resume.* exists by testing a fetch
-  // We don't have an endpoint for that — use validate_profile which reports it.
   try {
     const v = await api.get("/api/profile/validate");
     const hasResume = !v.missing_required.some(m => m.field === "master_resume");
-    const dz = $("#dropzone"); const meta = $("#dz-meta"); const name = $("#dz-name");
-    if (hasResume) {
-      dz.classList.add("ok-have");
-      name.textContent = "Resume on file";
-      meta.textContent = "click to replace, or drag a new one";
-    } else {
-      name.textContent = "Click to upload";
-      meta.textContent = "no file yet";
-    }
+    _setDzState(hasResume);
   } catch {}
 }
 
 async function uploadResume(file) {
   if (!file) return;
+  // Show filename immediately — before the upload completes
+  _setDzState(false);
+  const nameEl = $("#dz-name"); const hNameEl = $("#home-dz-name");
+  const metaEl = $("#dz-meta"); const hMetaEl = $("#home-dz-meta");
+  const label = `⏳ Uploading ${file.name}…`;
+  if (nameEl)  nameEl.textContent  = label;
+  if (hNameEl) hNameEl.textContent = label;
+  if (metaEl)  metaEl.textContent  = `${(file.size/1024).toFixed(0)} KB`;
+  if (hMetaEl) hMetaEl.textContent = `${(file.size/1024).toFixed(0)} KB`;
+
   const fd = new FormData();
   fd.append("file", file);
   const res = await fetch("/api/profile/upload-resume", { method: "POST", body: fd }).then(r => r.json());
   if (!res.ok) { toast("Upload failed: " + (res.error || ""), "err"); return; }
-  $("#dz-name").textContent = `Saved as ${res.saved_as}`;
-  $("#dz-meta").textContent = `${(res.size_bytes / 1024).toFixed(0)} KB`;
+
+  _setDzState(true, res.saved_as, (res.size_bytes / 1024).toFixed(0));
   toast("Resume uploaded — auto-filling profile…", "ok");
   await parseResumeAndFill(false);
 }
 
 async function parseResumeAndFill(overwrite) {
-  $("#parse-status").textContent = "Reading resume with AI…";
+  const statusEls = [$("#parse-status"), $("#home-parse-status")];
+  statusEls.forEach(el => { if (el) el.textContent = "Reading resume with AI…"; });
   const res = await api.post("/api/profile/parse-resume", { overwrite });
   if (!res.ok) {
-    $("#parse-status").textContent = "";
+    statusEls.forEach(el => { if (el) el.textContent = ""; });
     const err = res.error || "";
-    const msg = err.includes("No usable LLM provider")
-      ? "No API key found — go to Settings tab and add your Gemini or Claude key first."
+    const msg = (err.includes("No usable LLM") || err.includes("No module"))
+      ? "No API key set — go to Settings tab and add your Gemini or Claude key."
       : "Parse failed: " + err;
     toast(msg, "err");
     return;
   }
-  $("#parse-status").textContent = `wrote ${res.written?.length || 0} fields, kept ${res.skipped_existing?.length || 0} existing`;
-  toast(`Profile auto-filled (${res.written?.length || 0} fields)`, "ok");
-  await loadProfile();   // reload form with newly written values
+  const done = `✓ Filled ${res.written?.length || 0} fields`;
+  statusEls.forEach(el => { if (el) el.textContent = done; });
+  toast(`Profile auto-filled (${res.written?.length || 0} fields) — check the Profile tab`, "ok");
+  await loadProfile();
 }
 
 $("#btn-parse-resume").addEventListener("click", () => parseResumeAndFill(false));
 $("#btn-parse-resume-overwrite").addEventListener("click", () => {
   if (confirm("Force-overwrite existing values from the resume?")) parseResumeAndFill(true);
 });
+
+// Profile tab file input
 $("#resume-file").addEventListener("change", e => {
   const f = e.target.files[0];
   if (f) uploadResume(f);
 });
+
+// Home tab file input
+const homeFile = $("#home-resume-file");
+if (homeFile) homeFile.addEventListener("change", e => {
+  const f = e.target.files[0];
+  if (f) uploadResume(f);
+});
+
+// Drag-and-drop for profile + home dropzones
 const dz = $("#dropzone");
 ["dragenter","dragover"].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.add("drag"); }));
 ["dragleave","drop"].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.remove("drag"); }));
@@ -752,6 +793,15 @@ dz.addEventListener("drop", e => {
   const f = e.dataTransfer.files[0];
   if (f) uploadResume(f);
 });
+const homeDz = $("#home-dropzone");
+if (homeDz) {
+  ["dragenter","dragover"].forEach(ev => homeDz.addEventListener(ev, e => { e.preventDefault(); homeDz.style.borderColor = "var(--accent)"; }));
+  ["dragleave","drop"].forEach(ev => homeDz.addEventListener(ev, e => { e.preventDefault(); homeDz.style.borderColor = ""; }));
+  homeDz.addEventListener("drop", e => {
+    const f = e.dataTransfer.files[0];
+    if (f) uploadResume(f);
+  });
+}
 
 // ── Per-field live validators ────────────────────────────────────────────
 // Each validator: { input | yn | dropzone, hint, check(value) -> bool }

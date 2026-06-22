@@ -166,54 +166,29 @@ def _call_openai(system, user, model, api_key, max_tokens, json_mode=False):
 
 
 def _call_gemini(system, user, model, api_key, max_tokens, json_mode=False):
-    import google.generativeai as genai
-    from google.generativeai.types import HarmCategory, HarmBlockThreshold
-    genai.configure(api_key=api_key)
-    cfg_kwargs = dict(max_output_tokens=max_tokens)
+    # Use the new google-genai SDK (google-generativeai is deprecated)
+    import google.genai as genai
+    from google.genai import types as genai_types
+
+    client = genai.Client(api_key=api_key)
+
+    cfg_kwargs: dict = dict(max_output_tokens=max_tokens, system_instruction=system)
     if json_mode:
         cfg_kwargs["response_mime_type"] = "application/json"
-    try:
-        thinking_cfg = genai.types.ThinkingConfig(thinking_budget=0)
-        cfg_kwargs["thinking_config"] = thinking_cfg
-    except Exception:
-        pass
-    safety_settings = {
-        HarmCategory.HARM_CATEGORY_HARASSMENT:        HarmBlockThreshold.BLOCK_NONE,
-        HarmCategory.HARM_CATEGORY_HATE_SPEECH:       HarmBlockThreshold.BLOCK_NONE,
-        HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
-        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+
+    config = genai_types.GenerateContentConfig(**cfg_kwargs)
+    resp = client.models.generate_content(model=model, contents=user, config=config)
+
+    text = (resp.text or "").strip()
+    meta = getattr(resp, "usage_metadata", None)
+    _call_gemini.last_usage = {
+        "model": model,
+        "prompt_tokens":     getattr(meta, "prompt_token_count",     0) if meta else 0,
+        "completion_tokens": getattr(meta, "candidates_token_count", 0) if meta else 0,
     }
-    gen = genai.GenerativeModel(
-        model_name=model,
-        system_instruction=system,
-        generation_config=genai.GenerationConfig(**cfg_kwargs),
-        safety_settings=safety_settings,
-    )
-    resp = gen.generate_content(user)
-    try:
-        cand = (resp.candidates or [None])[0]
-        if cand is None:
-            return ""
-        finish_reason = getattr(cand, "finish_reason", None)
-        parts = getattr(getattr(cand, "content", None), "parts", []) or []
-        text_chunks = [getattr(p, "text", "") for p in parts]
-        text = "".join(t for t in text_chunks if t).strip()
-        if finish_reason and int(finish_reason) not in (0, 1):
-            log.warning(f"gemini finish_reason={finish_reason} returned {len(text)} chars")
-        meta = getattr(resp, "usage_metadata", None)
-        _call_gemini.last_usage = {
-            "model": model,
-            "prompt_tokens": getattr(meta, "prompt_token_count", 0) if meta else 0,
-            "completion_tokens": getattr(meta, "candidates_token_count", 0) if meta else 0,
-        }
-        if not text:
-            raise RuntimeError(f"Gemini returned no text (finish_reason={finish_reason}).")
-        return text
-    except Exception as e:
-        try:
-            return resp.text.strip()
-        except Exception:
-            raise e
+    if not text:
+        raise RuntimeError("Gemini returned no text.")
+    return text
 
 
 def _dispatch(system, user, provider, model, api_key, max_tokens, json_mode=False):
@@ -282,10 +257,19 @@ def _dispatch_with_fallback(system, user, tier, *, primary_provider=None,
         except Exception as exc:
             _record(provider, success=False, usage=_last_usage_for(provider))
             last_exc = exc
-            if _is_rate_limit(exc):
-                log.warning(f"{provider} rate-limited — trying next provider in chain")
+            # Fall back on rate limits, missing packages, or auth errors so
+            # one broken provider never blocks the whole pipeline.
+            should_fallback = (
+                _is_rate_limit(exc)
+                or isinstance(exc, (ImportError, ModuleNotFoundError))
+                or any(k in str(exc).lower() for k in (
+                    "no module", "api key", "authentication", "permission",
+                    "invalid key", "unauthorized", "no text",
+                ))
+            )
+            if should_fallback:
+                log.warning(f"{provider} failed ({type(exc).__name__}: {exc}) — trying next provider")
                 continue
-            # Non-rate-limit error: re-raise immediately (don't silently swallow bugs)
             raise
 
     if last_exc:

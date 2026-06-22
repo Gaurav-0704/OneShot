@@ -138,6 +138,19 @@
     </div>
     <div class="hero-greeting">Hey, <span id="hero-greeting-name">there</span> — ready to fire?</div>
     <div class="hero-sub">Automated job applications powered by AI. Find, tailor, and apply — one shot at a time.</div>
+    <!-- Quick resume upload on home screen -->
+    <div class="hero-resume-box" id="home-resume-box">
+      <label class="hero-resume-drop" id="home-dropzone" style="cursor:pointer;display:flex;align-items:center;gap:12px;background:var(--glass);border:1.5px dashed var(--glass-border);border-radius:12px;padding:14px 20px;transition:border-color .2s">
+        <input type="file" accept=".pdf,.docx,.doc,.txt" hidden id="home-resume-file"/>
+        <span style="font-size:26px">📄</span>
+        <div>
+          <div id="home-dz-name" style="font-weight:600;font-size:14px">Upload your resume to get started</div>
+          <div id="home-dz-meta" style="font-size:12px;color:var(--text-muted)">PDF / DOCX · click or drag here</div>
+        </div>
+        <span class="btn tiny" style="margin-left:auto;pointer-events:none">Browse</span>
+      </label>
+      <div id="home-parse-status" class="muted small" style="margin-top:6px;text-align:center"></div>
+    </div>
     <div class="hero-cta">
       <button class="btn primary" onclick="switchTab('search')">🔍 Start a Search Run</button>
       <button class="btn" onclick="switchTab('apply')">⚡ Review Ready Jobs</button>
@@ -575,6 +588,28 @@
     </div>
   </div>
 
+  <!-- Resume upload — shown first so new users know to start here -->
+  <div class="card no-lift" style="border:1px solid var(--accent-dim,rgba(79,142,247,.35))">
+    <div class="card-head">
+      <h3>📄 Resume <span class="badge req">required</span></h3>
+      <div style="display:flex;gap:8px">
+        <button type="button" class="btn tiny" id="btn-parse-resume">↺ Extract to Profile</button>
+        <button type="button" class="btn tiny ghost" id="btn-parse-resume-overwrite">Overwrite All</button>
+      </div>
+    </div>
+    <div class="card-body">
+      <label class="dropzone" id="dropzone" style="cursor:pointer">
+        <input type="file" name="resume_file" accept=".pdf,.docx,.doc,.txt" hidden id="resume-file"/>
+        <div class="dz-inner">
+          <div class="dz-icon">📄</div>
+          <div class="dz-text" id="dz-name">Drop PDF / DOCX here or click to browse</div>
+          <div class="dz-hint" id="dz-meta">PDF recommended · max 10 MB</div>
+        </div>
+      </label>
+      <div id="parse-status" class="muted small" style="margin-top:8px"></div>
+    </div>
+  </div>
+
   <!-- Completeness inline card -->
   <div class="card no-lift validity-card" id="profile-validity-card">
     <div class="card-body" style="padding:14px 18px">
@@ -657,26 +692,7 @@
     </div>
 
     <!-- Resume upload -->
-    <div class="card no-lift" id="profile-section-resume">
-      <div class="card-head">
-        <h3>Resume <span class="badge req">required</span></h3>
-        <div style="display:flex;gap:8px">
-          <button type="button" class="btn tiny" id="btn-parse-resume">↺ Extract to Profile</button>
-          <button type="button" class="btn tiny ghost" id="btn-parse-resume-overwrite">Overwrite All</button>
-        </div>
-      </div>
-      <div class="card-body">
-        <label class="dropzone" id="dropzone">
-          <input type="file" name="resume_file" accept=".pdf,.docx,.doc,.txt" hidden id="resume-file"/>
-          <div class="dz-inner">
-            <div class="dz-icon">📄</div>
-            <div class="dz-text" id="resume-dz-text">Drop PDF/DOCX or click to browse</div>
-            <div class="dz-hint">PDF recommended · max 10 MB</div>
-          </div>
-        </label>
-        <div id="parse-status" class="muted small" style="margin-top:8px"></div>
-      </div>
-    </div>
+    <!-- Resume card moved to top of profile page -->
 
     <!-- Summary / bio -->
     <div class="card no-lift" id="profile-section-summary">
