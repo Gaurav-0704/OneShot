@@ -1,0 +1,41 @@
+# ── Secrets (NEVER commit) ─────────────────────────────────────────────
+.env
+*.env
+!.env.example
+
+# ── Personal data / PII (each user provides their own) ─────────────────
+config/personal.yaml
+config/questions.yaml
+config/master_resume.pdf
+config/showcase.pdf
+config/reference/
+config/_backup_*/
+
+# ── Generated output (resumes, cover letters, tracking, run state) ─────
+outputs/
+
+# ── Python ─────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# ── Virtual environments ──────────────────────────────────────────────
+venv/
+.venv/
+env/
+
+# ── Logs ───────────────────────────────────────────────────────────────
+*.log
+outputs/logs/
+
+# ── Editors / OS ───────────────────────────────────────────────────────
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# ── Stray build artifacts ──────────────────────────────────────────────
+for
+D:ProjectsOneShotextension/
+graphify-out/
