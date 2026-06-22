@@ -2,7 +2,7 @@
 check_keys.py - one-shot test that every configured API key actually works.
 
 Run from the project root with the venv active:
-  venv\Scripts\python.exe check_keys.py
+  venv/Scripts/python.exe check_keys.py
 
 For each provider whose key is set in .env (or in the OS env), it makes ONE
 tiny completion call ("reply with the word OK") and prints the result. No
@@ -87,23 +87,34 @@ def check_gemini():
     if not key:
         return ("Gemini", "skipped", "no key set")
     try:
-        import google.generativeai as genai
+        try:
+            import google.genai as genai
+            _use_new_sdk = True
+        except ImportError:
+            import google.generativeai as genai  # type: ignore
+            _use_new_sdk = False
     except ImportError:
-        return ("Gemini", "fail", "google-generativeai package not installed")
+        return ("Gemini", "fail", "google-genai package not installed")
     t0 = time.time()
     try:
-        genai.configure(api_key=key)
-        gen = genai.GenerativeModel("gemini-2.5-flash")
-        resp = gen.generate_content("Reply with the word OK only.")
-        # Don't trust resp.text - it raises if finish_reason != STOP
-        cand = (resp.candidates or [None])[0]
-        if not cand:
-            return ("Gemini", "fail", "no candidates returned")
-        parts = getattr(getattr(cand, "content", None), "parts", []) or []
-        text = "".join(getattr(p, "text", "") for p in parts).strip()
+        if _use_new_sdk:
+            # google-genai >= 1.0 uses client-based API
+            client = genai.Client(api_key=key)
+            resp = client.models.generate_content(
+                model="gemini-2.5-flash", contents="Reply with the word OK only."
+            )
+            text = (resp.text or "").strip()
+        else:
+            genai.configure(api_key=key)
+            gen = genai.GenerativeModel("gemini-2.5-flash")
+            resp = gen.generate_content("Reply with the word OK only.")
+            cand = (resp.candidates or [None])[0]
+            if not cand:
+                return ("Gemini", "fail", "no candidates returned")
+            parts = getattr(getattr(cand, "content", None), "parts", []) or []
+            text = "".join(getattr(p, "text", "") for p in parts).strip()
         if not text:
-            fr = getattr(cand, "finish_reason", "?")
-            return ("Gemini", "fail", f"empty text (finish_reason={fr}) · key {_short(key)}")
+            return ("Gemini", "fail", f"empty response · key {_short(key)}")
         return ("Gemini", "ok", f"{text!r} in {time.time()-t0:.1f}s · key {_short(key)}")
     except Exception as e:
         msg = str(e)[:200]
@@ -118,14 +129,18 @@ def check_gemini():
 
 
 def main() -> int:
-    print("\nOneShot — API key health check")
+    # Ensure Unicode output works on Windows cp1252 consoles
+    if hasattr(sys.stdout, "buffer"):
+        import io
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+    print("\nOneShot - API key health check")
     print("=" * 70)
     results = [check_anthropic(), check_openai(), check_gemini()]
     width = max(len(r[0]) for r in results)
     any_fail = False
     for name, status, detail in results:
-        icon = {"ok": "✓", "fail": "✗", "skipped": "·"}[status]
-        print(f"  {icon} {name:<{width}}  {status:<7}  {detail}")
+        icon = {"ok": "OK", "fail": "FAIL", "skipped": "--"}[status]
+        print(f"  [{icon}] {name:<{width}}  {status:<7}  {detail}")
         if status == "fail":
             any_fail = True
     print("=" * 70)
