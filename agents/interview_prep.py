@@ -22,7 +22,6 @@ the user can trigger it manually from a future "Interview" tab.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
 
 from agents.base import Agent
 from models import JobApplication, UserProfile

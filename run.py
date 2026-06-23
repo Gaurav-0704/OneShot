@@ -152,7 +152,7 @@ def cmd_status(args) -> int:
     print(f"  Applied  - today: {a_today}    lifetime: {a_total}")
     print(f"  Failed   - today: {f_today}    lifetime: {f_total}")
     print()
-    print(f"  Files:")
+    print("  Files:")
     print(f"    {applied}")
     print(f"    {failed}")
     print()

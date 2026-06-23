@@ -22,7 +22,6 @@ from __future__ import annotations
 import logging
 import os
 import re
-from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -32,7 +31,6 @@ from agents.learner import LearnerAgent
 from agents.packager import PackagerAgent
 from agents.profile import ProfileAgent
 from agents.tailor import TailorAgent
-from core.tracker import daily_count
 from models import JobApplication, UserProfile
 
 log = logging.getLogger("orchestrator")
@@ -85,7 +83,7 @@ class Orchestrator:
 
     def run(self) -> int:
         log.info("=" * 64)
-        log.info(f" Pipeline start  -  tailoring factory mode")
+        log.info(" Pipeline start  -  tailoring factory mode")
         log.info("=" * 64)
 
         # ── Archive previous run before writing any new pending rows ──────────

@@ -40,7 +40,7 @@ def _bootstrap_resume(root: Path) -> None:
         return
     try:
         import urllib.request
-        logging.getLogger(__name__).info(f"Downloading resume from RESUME_URL ...")
+        logging.getLogger(__name__).info("Downloading resume from RESUME_URL ...")
         urllib.request.urlretrieve(url, resume_path)
         logging.getLogger(__name__).info(f"Resume saved to {resume_path}")
     except Exception as e:
