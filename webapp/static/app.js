@@ -916,6 +916,31 @@ async function renderValidity() {
     runBtn.style.opacity = v.is_complete ? "1" : "0.5";
     runBtn.style.cursor = v.is_complete ? "" : "not-allowed";
   }
+  syncRunButtons();
+}
+
+// Keep every Start-Run button (top, card-head, bottom bars) in sync with the
+// primary #btn-run state (incomplete-profile disable + running disable).
+function syncRunButtons() {
+  const main = $("#btn-run");
+  if (!main) return;
+  $$(".run-mirror").forEach(b => {
+    b.disabled = main.disabled;
+    b.style.opacity = main.disabled ? "0.5" : "1";
+    b.style.cursor = main.disabled ? "not-allowed" : "";
+    b.title = main.title;
+  });
+}
+function setRunButtonsRunning(running) {
+  const main = $("#btn-run");
+  if (!main) return;
+  if (running) {
+    main.disabled = true;
+    syncRunButtons();
+  } else {
+    // Re-derive the correct enabled state (profile completeness) on finish.
+    renderValidity();
+  }
 }
 
 function jumpToField(fieldPath) {
@@ -1267,14 +1292,16 @@ function startEventStream() {
       if (ev.type === "done" || ev.type === "end" || ev.type === "error") {
         setRunnerDot(ev.status || (ev.type === "error" ? "error" : "done"), false);
         setStopButtonVisible(false);
+        setRunButtonsRunning(false);
         loadStatus();
         // Auto-load related tabs after a run finishes
-        loadDiscovered(); loadDocuments();
+        loadDiscovered(); loadDocuments(); loadPipeline();
         loadApplications("applied"); loadApplications("pending");
         loadErrors();
       } else {
         setRunnerDot("running", true);
         setStopButtonVisible(true);
+        setRunButtonsRunning(true);
         $("#nav-badge-live").hidden = false;
       }
     } catch {}
@@ -2005,8 +2032,9 @@ async function loadProviderToggles() {
     const models  = { gemini: "gemini-2.5-flash", claude: "claude-haiku-4-5", openai: "gpt-4o-mini" };
     target.innerHTML = `
       <div style="margin-bottom:12px" class="muted small">
-        <b>Fallback order:</b> Gemini first (free) → Claude → OpenAI.
-        When an enabled provider hits a rate limit, OneShot automatically switches to the next one mid-run — no manual action needed.
+        <b>Single-provider engine:</b> the whole pipeline runs on the one provider you pick in
+        Settings (no cross-provider fallback). These cards show which keys are set; switch the
+        active provider in the Settings tab.
       </div>
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px">
         ${d.providers.map(p => `
@@ -2451,3 +2479,24 @@ const _run2 = document.getElementById("btn-run2");
 if (_run2) _run2.addEventListener("click", () => document.getElementById("btn-run").click());
 const _save2 = document.getElementById("btn-save-search2");
 if (_save2) _save2.addEventListener("click", () => document.getElementById("btn-save-search").click());
+
+// Bottom Start-Run bar (Phase 5): copy its count into the form, then run.
+const _runBottom = document.getElementById("btn-run-bottom");
+if (_runBottom) _runBottom.addEventListener("click", () => {
+  const lb = document.getElementById("limit-bottom");
+  const f = document.getElementById("search-form");
+  if (lb && f && lb.value) f.elements["limit"].value = lb.value;
+  document.getElementById("btn-run").click();
+});
+const _saveBottom = document.getElementById("btn-save-search-bottom");
+if (_saveBottom) _saveBottom.addEventListener("click", () => document.getElementById("btn-save-search").click());
+// Keep the two count fields in sync both ways.
+const _limitTop = () => document.querySelector('#search-form [name="limit"]');
+const _limitBottom = document.getElementById("limit-bottom");
+if (_limitBottom) {
+  _limitBottom.addEventListener("input", () => { const t = _limitTop(); if (t) t.value = _limitBottom.value; });
+  const t = _limitTop();
+  if (t) t.addEventListener("input", () => { _limitBottom.value = t.value; });
+}
+// Ensure mirrors reflect the current run-button state on load.
+syncRunButtons();
