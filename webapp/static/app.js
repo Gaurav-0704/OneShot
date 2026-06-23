@@ -91,7 +91,16 @@ function switchTab(name) {
   if (tabName === "profile")   { loadProfile(); renderValidity(); loadShowcaseStatus(); }
   if (tabName === "settings")  { loadEnv(); bindSettingsHandlers(); loadHealth(); loadProviderToggles(); }
   if (tabName === "search" && subName === "search") { loadStatus(); loadInsights(); refreshResumeStatus(); }
+  document.body.classList.remove("nav-open");   // close the mobile menu after navigating
 }
+
+// Mobile hamburger: toggle the slide-in sidebar + overlay
+(function bindMobileNav() {
+  const btn = document.getElementById("mobile-menu-btn");
+  const overlay = document.getElementById("mobile-overlay");
+  if (btn) btn.addEventListener("click", () => document.body.classList.toggle("nav-open"));
+  if (overlay) overlay.addEventListener("click", () => document.body.classList.remove("nav-open"));
+})();
 
 // Settings sub-tab (stab) switcher
 document.addEventListener("click", e => {
