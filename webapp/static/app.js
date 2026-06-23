@@ -984,6 +984,7 @@ async function loadPreferences() {
     setVal(f, "locations",    (p.locations || []).join("\n"));
     setVal(f, "allowed_countries", (p.allowed_countries || []).join(", "));
     setVal(f, "remote_scope", p.remote_scope || "country");
+    if (f.elements["fresh_only"]) f.elements["fresh_only"].checked = (p.fresh_only !== false);
     f.elements["remote"].checked = !!p.remote;
     f.elements["hybrid"].checked = !!p.hybrid;
     f.elements["onsite"].checked = !!p.onsite;
@@ -1037,6 +1038,7 @@ function collectPreferences() {
     allowed_countries: csv("allowed_countries"),
     allowed_regions:   [],
     remote_scope: getVal(f, "remote_scope") || "country",
+    fresh_only: f.elements["fresh_only"] ? f.elements["fresh_only"].checked : true,
     remote: f.elements["remote"].checked,
     hybrid: f.elements["hybrid"].checked,
     onsite: f.elements["onsite"].checked,

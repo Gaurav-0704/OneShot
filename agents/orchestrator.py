@@ -258,6 +258,9 @@ class Orchestrator:
         )
         candidates = agent.discover()
 
+        if agent.new_count is not None:
+            log.info(f"{agent.new_count} new job(s) since last run")
+
         # Persist a full snapshot (above + below threshold) for the Discovered tab.
         try:
             import json

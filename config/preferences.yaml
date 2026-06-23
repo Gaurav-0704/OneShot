@@ -18,6 +18,8 @@ allowed_countries:
 - United States
 allowed_regions: []
 remote_scope: country
+# Phase 2: only surface jobs not seen in a prior run. Set false to show all.
+fresh_only: true
 remote: true
 hybrid: false
 onsite: false
