@@ -61,6 +61,7 @@ class Orchestrator:
         headless: bool = False,        # kept for API compat; no browser launched
         should_stop=None,
         use_cache: bool = False,
+        on_event=None,
     ):
         self.root          = root
         self.master_resume = master_resume
@@ -74,6 +75,7 @@ class Orchestrator:
         self.headless      = headless
         self.should_stop   = should_stop or (lambda: False)
         self.use_cache     = use_cache
+        self.on_event      = on_event or (lambda **kw: None)
 
         self.applied_csv = root / "outputs" / "applied_jobs.csv"
         self.failed_csv  = root / "outputs" / "failed_jobs.csv"
@@ -146,60 +148,84 @@ class Orchestrator:
         humanizer      = HumanizerAgent(profile, root=self.root)
         packager       = PackagerAgent(profile, pending_csv=self.pending_csv, root=self.root)
 
-        n_packaged    = 0
-        n_failed      = 0
-        n_skipped     = 0   # candidates beyond TAILOR_TOP_N
-        n_humanized   = 0
+        # Decide which candidates get the full package up front. run_limit and
+        # TAILOR_TOP_N both mean "only the top N" — candidates are already sorted
+        # freshest + highest-fit, so a head slice is correct.
+        caps = [n for n in (self.run_limit or 0, tailor_top_n) if n and n > 0]
+        process_n = min(caps) if caps else len(candidates)
+        process_list = candidates[:process_n]
+        n_skipped = len(candidates) - len(process_list)
 
-        for i, app in enumerate(candidates, 1):
+        import os
+        import threading
+        import time as _time
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        workers = max(1, int(os.environ.get("TAILOR_WORKERS", "4") or 4))
+        csv_lock = threading.Lock()
+        counters = {"packaged": 0, "failed": 0, "humanized": 0}
+        counters_lock = threading.Lock()
+        total = len(process_list)
+        t0 = _time.time()
+
+        def _process(idx: int, app: JobApplication) -> None:
             if self.should_stop():
-                log.info("stop requested - exiting per-job loop")
-                break
-            if self.run_limit and (n_packaged + n_failed) >= self.run_limit:
-                log.info(f"hit run limit {self.run_limit}. stopping.")
-                break
-
-            log.info(f"[{i}/{len(candidates)}] {app.title} @ {app.company}")
-            if app.fit_score:
-                log.info(f"   fit: {app.fit_score}/10  —  {app.fit_reason}")
-
-            # Cost cap: skip tailoring for jobs beyond TAILOR_TOP_N
-            if tailor_top_n > 0 and (n_packaged + n_failed) >= tailor_top_n:
-                log.info(f"   TAILOR_TOP_N reached — skipping (discovered only)")
-                n_skipped += 1
-                continue
-
+                return
+            log.info(f"[{idx}/{total}] {app.title} @ {app.company}"
+                     + (f"  (fit {app.fit_score}/10)" if app.fit_score else ""))
             app.folder = self._make_folder(app)
 
-            # ── Tailor (research + write) ─────────────────────────────────────
             try:
                 tailor_agent.tailor(app)
             except Exception as e:
                 log.error(f"   tailor crashed: {e}")
-                n_failed += 1
-                continue
+                with counters_lock: counters["failed"] += 1
+                self.on_event(type="job", stage="failed", title=app.title, company=app.company)
+                return
 
             if app.tailored_resume_pdf is None:
-                log.warning("   no resume produced - skipping")
-                n_failed += 1
-                continue
+                log.warning(f"   no resume produced - skipping {app.title}")
+                with counters_lock: counters["failed"] += 1
+                self.on_event(type="job", stage="failed", title=app.title, company=app.company)
+                return
 
-            # ── Humanize (clean + smoke-test) ────────────────────────────────
             try:
                 humanizer.run(app, profile)
-                n_humanized += 1
+                with counters_lock: counters["humanized"] += 1
             except Exception as e:
                 log.warning(f"   humanizer failed (non-fatal): {e}")
 
-            # ── Package (write to pending_review.csv) ─────────────────────────
             try:
-                packager.package(app)
-                n_packaged += 1
+                with csv_lock:                       # serialize pending_review.csv writes
+                    packager.package(app)
+                with counters_lock: counters["packaged"] += 1
+                self.on_event(type="job", stage="packaged", title=app.title,
+                              company=app.company, ats_score=app.ats_score,
+                              fit_score=app.fit_score)
             except Exception as e:
                 log.error(f"   packager crashed: {e}")
-                n_failed += 1
+                with counters_lock: counters["failed"] += 1
 
-        self._final_report(n_packaged, n_failed, n_skipped, n_humanized)
+        log.info(f"tailoring {total} job(s) with {workers} parallel worker(s)")
+        if workers == 1:
+            for i, app in enumerate(process_list, 1):
+                if self.should_stop():
+                    log.info("stop requested - exiting per-job loop")
+                    break
+                _process(i, app)
+        else:
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                futures = {pool.submit(_process, i, app): i
+                           for i, app in enumerate(process_list, 1)}
+                for fut in as_completed(futures):
+                    fut.result()   # surface unexpected exceptions
+
+        elapsed = _time.time() - t0
+        per_job = elapsed / max(1, counters["packaged"] + counters["failed"])
+        log.info(f"per-job loop finished in {elapsed:.1f}s "
+                 f"({per_job:.1f}s/job avg, {workers} workers)")
+        self._final_report(counters["packaged"], counters["failed"],
+                           n_skipped, counters["humanized"])
 
         # ── LearnerAgent — runs after every pipeline pass ──────────────────────
         try:

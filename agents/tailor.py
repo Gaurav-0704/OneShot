@@ -180,16 +180,25 @@ class TailorAgent(Agent):
         if self.fetch_company_page and app.company:
             about_text = self._try_fetch_company_about(app.company)
 
-        try:
-            brief = self._call_research_llm(app.title, app.company, jd_text, about_text)
-            app.company_about    = brief.get("company_about", "")
-            app.company_size     = brief.get("company_size", "")
-            app.company_industry = brief.get("company_industry", "")
-            app.company_website  = brief.get("company_website", "")
-            app.research_notes   = self._compose_research_notes(brief)
-        except Exception as e:
-            self.warn(f"research LLM failed for {app.title}: {e}")
-            app.research_notes = f"Company: {app.company}. (Research failed; using JD only.)"
+        # Phase 4: cache the research brief by (title, company, jd hash) so a
+        # repeat run never re-pays the LLM call for the same posting.
+        from core import cache as _cache
+        import hashlib as _hl
+        brief_key = f"{app.company}|{app.title}|{_hl.sha1(jd_text.encode('utf-8')).hexdigest()[:12]}"
+        brief = _cache.get("research_brief", brief_key, ttl_seconds=14 * 86400)
+        if brief is None:
+            try:
+                brief = self._call_research_llm(app.title, app.company, jd_text, about_text)
+                _cache.set("research_brief", brief_key, brief)
+            except Exception as e:
+                self.warn(f"research LLM failed for {app.title}: {e}")
+                app.research_notes = f"Company: {app.company}. (Research failed; using JD only.)"
+                return
+        app.company_about    = brief.get("company_about", "")
+        app.company_size     = brief.get("company_size", "")
+        app.company_industry = brief.get("company_industry", "")
+        app.company_website  = brief.get("company_website", "")
+        app.research_notes   = self._compose_research_notes(brief)
 
     def _call_research_llm(self, title: str, company: str, jd: str, about: str) -> dict:
         from llm.client import complete_cheap
@@ -238,11 +247,19 @@ class TailorAgent(Agent):
         slug = re.sub(r"[^a-z0-9]+", "", company.lower())
         if not slug:
             return ""
+        # Phase 4: cache the company About fetch by slug (30-day TTL).
+        from core import cache as _cache
+        cached = _cache.get("company_about", slug, ttl_seconds=30 * 86400)
+        if cached is not None:
+            return cached
+        text = ""
         for u in (f"https://{slug}.com/about", f"https://{slug}.com"):
             t = self._fetch_url_text(u)
             if t:
-                return t
-        return ""
+                text = t
+                break
+        _cache.set("company_about", slug, text)
+        return text
 
     @staticmethod
     def _strip_html(html: str) -> str:
@@ -272,7 +289,8 @@ class TailorAgent(Agent):
             Path(__file__).resolve().parent.parent
         )
         target_score = int(os.environ.get("ATS_TARGET_MIN", "80") or 80)
-        max_rewrites = int(os.environ.get("ATS_MAX_REWRITES", "1") or 1)
+        # Phase 4: rewrite pass is opt-in (default 0) — keeps full-batch runs fast.
+        max_rewrites = int(os.environ.get("ATS_MAX_REWRITES", "0") or 0)
 
         self.info(f"writing for {app.title} @ {app.company} (target ATS >= {target_score})")
 

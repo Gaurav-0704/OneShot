@@ -396,8 +396,17 @@ class ProfileAgent(Agent):
         username = self._extract_github_username(profile.github_url)
         if not username:
             return
+        # Phase 4: cache GitHub enrichment by username (12-hour TTL) so repeat
+        # profile builds don't re-hit the API or block on a slow response.
+        from core import cache as _cache
+        cached = _cache.get("github", username, ttl_seconds=12 * 3600)
+        if cached is not None:
+            profile.github_bio       = cached.get("bio", "")
+            profile.github_repos     = cached.get("repos", [])
+            profile.github_languages = cached.get("languages", [])
+            return
         try:
-            with httpx.Client(timeout=10) as client:
+            with httpx.Client(timeout=8) as client:
                 u = client.get(f"https://api.github.com/users/{username}")
                 if u.status_code == 200:
                     data = u.json()
@@ -421,6 +430,11 @@ class ProfileAgent(Agent):
                     )
                     profile.github_languages = [l for l in langs if l]
                     self.info(f"github: pulled {len(profile.github_repos)} top repos")
+            _cache.set("github", username, {
+                "bio": profile.github_bio,
+                "repos": profile.github_repos,
+                "languages": profile.github_languages,
+            })
         except Exception as e:
             self.warn(f"github enrichment failed: {e}")
 
