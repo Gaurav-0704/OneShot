@@ -389,12 +389,11 @@ async function loadEnv() {
     // Settings form (only if it exists — settings tab may be hidden)
     const form = $("#settings-form");
     if (form) {
-      // Provider buttons
+      // Provider buttons — single active provider
       $$(".provider-btn").forEach(b => b.classList.toggle("active", b.dataset.provider === e.llm_provider));
+      const apl = $("#active-provider-label");
+      if (apl) apl.textContent = e.llm_provider || "claude";
 
-      // Per-tier provider routing (blank = use default above)
-      setVal(form, "LLM_PROVIDER_SMART", e.llm_provider_smart || "");
-      setVal(form, "LLM_PROVIDER_CHEAP", e.llm_provider_cheap || "");
       setVal(form, "CLAUDE_BUDGET_USD",  e.claude_budget_usd  || "");
       setVal(form, "ATS_TARGET_MIN",     e.ats_target_min   || 80);
       setVal(form, "ATS_MAX_REWRITES",   e.ats_max_rewrites || 1);
@@ -452,10 +451,6 @@ async function saveSettings() {
     const v = (form.elements[k]?.value ?? "").toString();
     if (v) set[k] = v;
   });
-  // Per-tier providers: always send (empty string clears the override)
-  ["LLM_PROVIDER_SMART", "LLM_PROVIDER_CHEAP"].forEach(k => {
-    set[k] = (form.elements[k]?.value ?? "").toString();
-  });
   // Budget: always send so user can clear it by emptying the field
   set["CLAUDE_BUDGET_USD"] = (form.elements["CLAUDE_BUDGET_USD"]?.value ?? "").toString();
   // ATS rewrite tuning - always send so user can change them
@@ -472,11 +467,26 @@ async function saveSettings() {
 }
 
 async function clearKey(name) {
-  if (!confirm(`Clear ${name}?`)) return;
-  await api.put("/api/env", { clear: [name] });
-  toast(`${name} cleared`, "ok");
-  loadEnv();
+  if (!confirm(`Remove ${name}? The engine won't be able to use this provider until you add it again.`)) return;
+  const res = await fetch("/api/env", {
+    method: "DELETE", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({ unset: [name] }),
+  }).then(r => r.json()).catch(() => ({ ok: false }));
+  if (res.ok) {
+    const inp = document.querySelector(`#settings-form [name="${name}"]`);
+    if (inp) inp.value = "";
+    toast(`${name} removed`, "ok");
+    loadEnv();
+  } else {
+    toast(`Remove failed`, "err");
+  }
 }
+
+// Remove-key buttons beside each API-key field
+document.addEventListener("click", e => {
+  const btn = e.target.closest(".btn-remove-key");
+  if (btn) clearKey(btn.dataset.key);
+});
 
 // Bind once, after DOM is ready (these elements only exist when settings tab loads)
 function bindSettingsHandlers() {

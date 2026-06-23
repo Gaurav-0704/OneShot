@@ -789,26 +789,15 @@
             </button>
           </div>
 
-          <div class="grid-2" style="margin-top:18px">
+          <div class="muted small" style="margin-top:12px">
+            The whole engine runs on this one provider —
+            <b id="active-provider-label">claude</b> — for every step.
+          </div>
+          <div class="grid-2" style="margin-top:14px">
             <div class="field"><label>Model Override (smart)</label><input type="text" name="LLM_MODEL" placeholder="leave blank for default"/></div>
             <div class="field"><label>Model Override (cheap)</label><input type="text" name="LLM_MODEL_CHEAP" placeholder="leave blank for default"/></div>
-            <div class="field"><label>Smart-tier provider</label>
-              <select name="LLM_PROVIDER_SMART">
-                <option value="">Same as default</option>
-                <option value="claude">claude</option>
-                <option value="openai">openai</option>
-                <option value="gemini">gemini</option>
-              </select>
-            </div>
-            <div class="field"><label>Cheap-tier provider</label>
-              <select name="LLM_PROVIDER_CHEAP">
-                <option value="">Same as default</option>
-                <option value="claude">claude</option>
-                <option value="openai">openai</option>
-                <option value="gemini">gemini</option>
-              </select>
-            </div>
           </div>
+          <div class="field-hint" style="margin-top:6px">Overrides apply only when the model belongs to the active provider.</div>
         </div>
       </div>
 
@@ -816,9 +805,15 @@
         <div class="card-head"><h3>API Keys</h3></div>
         <div class="card-body">
           <div class="grid-2">
-            <div class="field"><label>Anthropic API Key</label><input type="password" name="ANTHROPIC_API_KEY" placeholder="sk-ant-…" autocomplete="off"/></div>
-            <div class="field"><label>OpenAI API Key</label><input type="password" name="OPENAI_API_KEY" placeholder="sk-…" autocomplete="off"/></div>
-            <div class="field"><label>Gemini API Key</label><input type="password" name="GEMINI_API_KEY" placeholder="AIza…" autocomplete="off"/></div>
+            <div class="field"><label>Anthropic API Key</label>
+              <div style="display:flex;gap:6px"><input type="password" name="ANTHROPIC_API_KEY" placeholder="sk-ant-…" autocomplete="off" style="flex:1"/><button type="button" class="btn tiny ghost btn-remove-key" data-key="ANTHROPIC_API_KEY">Remove</button></div>
+            </div>
+            <div class="field"><label>OpenAI API Key</label>
+              <div style="display:flex;gap:6px"><input type="password" name="OPENAI_API_KEY" placeholder="sk-…" autocomplete="off" style="flex:1"/><button type="button" class="btn tiny ghost btn-remove-key" data-key="OPENAI_API_KEY">Remove</button></div>
+            </div>
+            <div class="field"><label>Gemini API Key</label>
+              <div style="display:flex;gap:6px"><input type="password" name="GEMINI_API_KEY" placeholder="AIza…" autocomplete="off" style="flex:1"/><button type="button" class="btn tiny ghost btn-remove-key" data-key="GEMINI_API_KEY">Remove</button></div>
+            </div>
             <div class="field"><label>Claude Budget (USD/run)</label><input type="number" name="CLAUDE_BUDGET_USD" step="0.01" min="0" placeholder="e.g. 0.50"/></div>
           </div>
         </div>
