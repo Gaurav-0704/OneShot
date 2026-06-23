@@ -451,6 +451,7 @@ def copilot_user_prompt(
     question_type: str,
     cached_answer: str | None = None,
     instructions: str = "",
+    research_notes: str = "",
 ) -> str:
     cached_section = ""
     if cached_answer:
@@ -459,14 +460,21 @@ def copilot_user_prompt(
             f"{cached_answer}\n"
         )
     extra = f"\n=== ADDITIONAL INSTRUCTIONS ===\n{instructions}\n" if instructions else ""
+    research_section = (
+        f"\n=== COMPANY RESEARCH NOTES ===\n{research_notes[:1500]}\n"
+        if research_notes else ""
+    )
     return (
         f"=== CANDIDATE PROFILE ===\n{profile}\n\n"
         f"=== JOB ===\n"
         f"Title: {job_title}\nCompany: {company}\n"
-        f"Description (excerpt):\n{job_description[:1500]}\n\n"
+        f"Description (excerpt):\n{job_description[:2500]}\n"
+        f"{research_section}\n"
         f"=== QUESTION TYPE: {question_type} ===\n"
         f"=== QUESTION ===\n{question}\n"
         f"{cached_section}{extra}\n"
         "Answer using ONLY facts from the candidate profile above. "
+        "Use the company research notes to make 'why this company / why this role' "
+        "answers specific and grounded. "
         "If a needed fact is missing, hedge honestly and flag needs_review=true."
     )
