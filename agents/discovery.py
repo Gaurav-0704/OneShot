@@ -132,6 +132,18 @@ class DiscoveryAgent(Agent):
             )
             self.info(f"after fit scoring: {len(jobs_dicts)}")
 
+        if not jobs_dicts:
+            self.warn(
+                "0 jobs to tailor after filtering. Common causes: job boards "
+                "blocked this server's IP (0 scraped), search terms too narrow, "
+                "date window too short, or fit threshold too high."
+            )
+
+        # Remember ONLY what we surface, so re-runs skip already-shown jobs
+        # without zeroing out future runs.
+        if prefs.get("fresh_only", True) is not False:
+            self.record_surfaced(jobs_dicts)
+
         return [self._to_application(j) for j in jobs_dicts]
 
     # ── Freshness / repost suppression (Phase 2) ──────────────────────────────
@@ -140,25 +152,45 @@ class DiscoveryAgent(Agent):
         return SeenStore(self.applied_csv.parent / "seen_jobs.sqlite")
 
     def _keep_fresh(self, jobs: list[dict], prefs: dict) -> list[dict]:
-        """Drop jobs seen in a prior run or reposts; remember the rest.
-        Toggle off with preferences.yaml `fresh_only: false`."""
+        """Drop only jobs that were SURFACED in a prior run (or reposts of them).
+
+        Recording happens later (record_surfaced) on just the jobs we actually
+        return — NOT every scraped job — otherwise a first run would mark
+        everything seen and a re-run would find 0 new. Toggle off with
+        preferences.yaml `fresh_only: false`."""
         if prefs.get("fresh_only", True) is False:
             self.new_count = len(jobs)
             return jobs
         try:
             store = self._seen_store()
             new, stats = store.split_new(jobs)
-            store.record(new)
             self.new_count = stats["new"]
             self.info(
-                f"freshness: {stats['new']} new since last run "
-                f"({stats['seen']} already seen, {stats['reposts']} reposts dropped)"
+                f"freshness: {stats['new']} not-yet-shown "
+                f"({stats['seen']} already shown, {stats['reposts']} reposts dropped)"
             )
+            # If freshness would empty the run but there WERE jobs, keep them —
+            # better to re-show than to leave the user staring at zero.
+            if not new and jobs:
+                self.warn("all scraped jobs were already shown before — showing them "
+                          "again (uncheck 'Only show new jobs' to silence this)")
+                self.new_count = len(jobs)
+                return jobs
             return new
         except Exception as e:
             self.warn(f"seen-store unavailable ({e}) - skipping freshness filter")
             self.new_count = len(jobs)
             return jobs
+
+    def record_surfaced(self, candidates: list[dict]) -> None:
+        """Remember the jobs we actually returned so future runs skip what the
+        user already saw. Only called for surfaced candidates."""
+        if not candidates:
+            return
+        try:
+            self._seen_store().record(candidates)
+        except Exception as e:
+            self.warn(f"could not record surfaced jobs: {e}")
 
     @staticmethod
     def _drop_stale(jobs: list[dict], prefs: dict) -> list[dict]:
