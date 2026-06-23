@@ -1257,6 +1257,9 @@ $("#btn-run").addEventListener("click", async () => {
   }
   if (json.already_running) toast("Pipeline already running", "");
   else toast(`Pipeline started — run ${json.run_id}`, "ok");
+  // The run also auto-starts continuous background search — reflect it.
+  if (json.background) renderBgDiscovery(json.background);
+  else refreshBgDiscovery();
   switchTab("live");
   startEventStream();
 });

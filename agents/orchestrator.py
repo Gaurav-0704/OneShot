@@ -162,7 +162,6 @@ class Orchestrator:
         process_list = candidates[:attempt_cap]
         n_skipped = len(candidates) - len(process_list)
 
-        import os
         import threading
         import time as _time
         from concurrent.futures import ThreadPoolExecutor, as_completed
