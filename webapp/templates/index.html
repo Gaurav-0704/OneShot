@@ -330,6 +330,10 @@
             <div class="field">
               <label>Job Titles / Search Terms</label>
               <textarea name="search_terms" rows="4" placeholder="Software Engineer&#10;Backend Engineer&#10;Data Engineer"></textarea>
+              <div style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap">
+                <button type="button" class="btn tiny" id="btn-suggest-terms">✨ Suggest from Resume</button>
+                <span class="muted small" id="suggest-terms-status"></span>
+              </div>
               <div class="field-hint">One per line. Used verbatim on each job board.</div>
             </div>
             <div class="field">
@@ -447,12 +451,6 @@
               <input type="number" name="min_fit_score" min="1" max="10" placeholder="6"/>
               <div class="field-hint">Jobs scoring below this are shown in Discovered but not tailored.</div>
             </div>
-          </div>
-
-          <!-- Suggest from resume -->
-          <div style="display:flex;gap:8px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
-            <button type="button" class="btn tiny" id="btn-suggest-terms">✨ Suggest from Resume</button>
-            <span class="muted small" id="suggest-terms-status"></span>
           </div>
 
           <!-- Blacklists -->
