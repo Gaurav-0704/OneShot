@@ -259,6 +259,20 @@
     </div>
   </div>
 
+  <!-- Background discovery (Phase 3) -->
+  <div class="card no-lift" id="bg-discovery-card" style="margin-bottom:14px">
+    <div class="card-body" style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding:14px 18px">
+      <div style="flex:1;min-width:200px">
+        <div style="font-size:13px;font-weight:700">🔄 Continuous background search</div>
+        <div class="muted small" id="bg-discovery-status">Off — runs discovery on a timer so fresh matches appear on their own.</div>
+      </div>
+      <label class="muted small" style="display:flex;align-items:center;gap:6px">Every
+        <input type="number" id="bg-interval-min" min="5" max="1440" value="60" style="width:70px"/> min</label>
+      <button type="button" class="btn" id="btn-bg-start">Start</button>
+      <button type="button" class="btn" id="btn-bg-stop">Stop</button>
+    </div>
+  </div>
+
   <div class="subnav" id="subnav-search">
     <button class="snav-item active" data-sub="search">Search Setup</button>
     <button class="snav-item" data-sub="live">

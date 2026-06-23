@@ -1071,6 +1071,38 @@ $("#btn-save-search").addEventListener("click", async () => {
   toast("Filters saved", "ok");
 });
 
+// ── Background discovery (Phase 3) ───────────────────────────────────────────
+function renderBgDiscovery(s) {
+  const el = $("#bg-discovery-status");
+  if (!el || !s) return;
+  if (s.enabled && s.running) {
+    const nxt = s.next_run_in_s != null ? ` · next pass in ${Math.ceil(s.next_run_in_s / 60)} min` : "";
+    const last = s.last_run_at ? ` · last: ${s.last_new_count ?? 0} new` : "";
+    el.innerHTML = `<span style="color:var(--green)">● On</span> — every ${s.interval_min} min${nxt}${last}`;
+  } else {
+    el.textContent = "Off — runs discovery on a timer so fresh matches appear on their own.";
+  }
+}
+async function refreshBgDiscovery() {
+  try { renderBgDiscovery(await api.get("/api/pipeline/discovery/status")); } catch (e) {}
+}
+{
+  const start = $("#btn-bg-start"), stop = $("#btn-bg-stop");
+  if (start) start.addEventListener("click", async () => {
+    await api.put("/api/preferences", collectPreferences());   // use current filters
+    const interval_min = Number(getVal2("#bg-interval-min") || 60);
+    renderBgDiscovery(await api.post("/api/pipeline/discovery/start", { interval_min }));
+    toast("Background search started", "ok");
+  });
+  if (stop) stop.addEventListener("click", async () => {
+    renderBgDiscovery(await api.post("/api/pipeline/discovery/stop", {}));
+    toast("Background search stopped", "ok");
+  });
+  setInterval(refreshBgDiscovery, 20000);
+  refreshBgDiscovery();
+}
+function getVal2(sel) { const el = $(sel); return el ? el.value : ""; }
+
 // Auto-suggest search terms from the master resume (one cheap LLM call).
 // Pre-fills the textarea + experience-level dropdown so the user starts
 // with role-appropriate queries instead of generic "Software Engineer".
