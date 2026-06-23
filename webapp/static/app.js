@@ -982,6 +982,8 @@ async function loadPreferences() {
     const f = $("#search-form");
     setVal(f, "search_terms", (p.search_terms || []).join("\n"));
     setVal(f, "locations",    (p.locations || []).join("\n"));
+    setVal(f, "allowed_countries", (p.allowed_countries || []).join(", "));
+    setVal(f, "remote_scope", p.remote_scope || "country");
     f.elements["remote"].checked = !!p.remote;
     f.elements["hybrid"].checked = !!p.hybrid;
     f.elements["onsite"].checked = !!p.onsite;
@@ -1032,6 +1034,9 @@ function collectPreferences() {
   return {
     search_terms: lines("search_terms"),
     locations:    lines("locations"),
+    allowed_countries: csv("allowed_countries"),
+    allowed_regions:   [],
+    remote_scope: getVal(f, "remote_scope") || "country",
     remote: f.elements["remote"].checked,
     hybrid: f.elements["hybrid"].checked,
     onsite: f.elements["onsite"].checked,

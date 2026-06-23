@@ -325,6 +325,23 @@
             </div>
           </div>
 
+          <!-- Geo bounding (Phase 1) -->
+          <div class="grid-2" style="margin-bottom:14px">
+            <div class="field">
+              <label>Allowed Countries</label>
+              <input type="text" name="allowed_countries" placeholder="United States"/>
+              <div class="field-hint">Comma-separated. Only jobs in these countries are kept. Blank = no geo filter.</div>
+            </div>
+            <div class="field">
+              <label>Remote Scope</label>
+              <select name="remote_scope">
+                <option value="country">My country only</option>
+                <option value="worldwide">Worldwide</option>
+              </select>
+              <div class="field-hint">"My country only" drops foreign remote leaks (e.g. China/HK on a US search).</div>
+            </div>
+          </div>
+
           <!-- Work type -->
           <div class="field" style="margin-bottom:14px">
             <label>Work Type</label>
