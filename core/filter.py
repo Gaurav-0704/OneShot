@@ -439,19 +439,35 @@ def score_and_filter(
     min_score = int(fs.get("min_score", 6))
     log.info(f"fit scoring {len(jobs)} jobs in batches of {BATCH_SIZE}")
 
-    # Build batches and score
-    by_id: dict[str, tuple[int, str]] = {}
-    for i in range(0, len(jobs), BATCH_SIZE):
-        chunk = jobs[i:i + BATCH_SIZE]
+    # Phase 4: score batches in parallel across a small pool (SCORE_WORKERS,
+    # default 3) so a large discovery doesn't block serially on the LLM.
+    import os
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    chunks = [jobs[i:i + BATCH_SIZE] for i in range(0, len(jobs), BATCH_SIZE)]
+    workers = max(1, int(os.environ.get("SCORE_WORKERS", "3") or 3))
+
+    def _score_chunk(idx_chunk):
+        idx, chunk = idx_chunk
         try:
             results = _score_batch(chunk, resume_text)
-            log.info(f"  batch {i // BATCH_SIZE + 1}: scored {len(results)}/{len(chunk)}")
-            by_id.update(results)
+            log.info(f"  batch {idx + 1}/{len(chunks)}: scored {len(results)}/{len(chunk)}")
+            return results
         except Exception as e:
-            log.warning(f"  batch {i // BATCH_SIZE + 1} failed: {e}; falling back to per-job")
+            log.warning(f"  batch {idx + 1} failed: {e}; falling back to per-job")
+            out: dict[str, tuple[int, str]] = {}
             for j in chunk:
                 score, reason = fit_score(j, resume_text)
-                by_id[j["job_id"]] = (score, reason)
+                out[j["job_id"]] = (score, reason)
+            return out
+
+    by_id: dict[str, tuple[int, str]] = {}
+    if len(chunks) <= 1 or workers == 1:
+        for ic in enumerate(chunks):
+            by_id.update(_score_chunk(ic))
+    else:
+        with ThreadPoolExecutor(max_workers=min(workers, len(chunks))) as pool:
+            for fut in as_completed([pool.submit(_score_chunk, ic) for ic in enumerate(chunks)]):
+                by_id.update(fut.result())
 
     # Annotate every job with its score (even below-threshold ones)
     for j in jobs:

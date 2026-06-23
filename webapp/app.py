@@ -70,6 +70,9 @@ def create_app(root: Path) -> Flask:
     from core.usage import configure as configure_usage
     configure_usage(root / "outputs" / "api_usage.json")
 
+    from core.cache import configure as configure_cache
+    configure_cache(root)
+
     app.register_blueprint(api_bp, url_prefix="/api")
     app.register_blueprint(copilot_bp, url_prefix="/api/copilot")
     app.register_blueprint(history_bp, url_prefix="/api/history")
