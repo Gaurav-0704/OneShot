@@ -918,7 +918,7 @@ function jumpToField(fieldPath) {
     "personal.contact.linkedin":"sec-links",
     "personal.contact.github":  "sec-links",
     "personal.address.city":    "sec-address",
-    "personal.address.country": "sec-identity",
+    "personal.address.country": "sec-address",
     "questions.years_of_experience":  "sec-experience",
     "questions.linkedin_headline":     "sec-about",
     "questions.user_information_summary": "sec-about",
