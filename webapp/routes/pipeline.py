@@ -94,6 +94,33 @@ def stream():
     return resp
 
 
+@bp.route("/discovery/start", methods=["POST"])
+def discovery_start():
+    """Start continuous background discovery (Phase 3)."""
+    bg = current_app.config.get("BG_DISCOVERY")
+    if not bg:
+        return jsonify({"ok": False, "error": "background discovery unavailable"}), 500
+    body = request.get_json(silent=True) or {}
+    interval = body.get("interval_min")
+    return jsonify({"ok": True, **bg.start(interval_min=interval)})
+
+
+@bp.route("/discovery/stop", methods=["POST"])
+def discovery_stop():
+    bg = current_app.config.get("BG_DISCOVERY")
+    if not bg:
+        return jsonify({"ok": False, "error": "background discovery unavailable"}), 500
+    return jsonify({"ok": True, **bg.stop()})
+
+
+@bp.route("/discovery/status", methods=["GET"])
+def discovery_status():
+    bg = current_app.config.get("BG_DISCOVERY")
+    if not bg:
+        return jsonify({"ok": False, "enabled": False, "running": False})
+    return jsonify({"ok": True, **bg.status()})
+
+
 @bp.route("/resume", methods=["POST"])
 def resume():
     """Resume the last stopped run from its checkpoint.

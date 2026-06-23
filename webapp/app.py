@@ -61,7 +61,11 @@ def create_app(root: Path) -> Flask:
     )
     CORS(app)
     app.config["ROOT"] = root
-    app.config["RUNNER"] = PipelineRunner(root)
+    runner = PipelineRunner(root)
+    app.config["RUNNER"] = runner
+
+    from webapp.background import BackgroundDiscovery
+    app.config["BG_DISCOVERY"] = BackgroundDiscovery(root, runner=runner)
 
     from core.usage import configure as configure_usage
     configure_usage(root / "outputs" / "api_usage.json")
