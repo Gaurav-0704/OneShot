@@ -86,7 +86,7 @@ function switchTab(name) {
 
   // Per-tab refresh hooks
   if (tabName === "home")      loadHome();
-  if (tabName === "apply")     loadApplications("pending");
+  if (tabName === "apply")     { loadPipeline(); loadApplications("pending"); }
   if (tabName === "documents") loadDocuments();
   if (tabName === "profile")   { loadProfile(); renderValidity(); loadShowcaseStatus(); }
   if (tabName === "settings")  { loadEnv(); bindSettingsHandlers(); loadHealth(); loadProviderToggles(); }
@@ -1011,6 +1011,74 @@ async function loadPreferences() {
     f.elements["fit_enabled"].checked = (p.fit_score?.enabled !== false);
     setVal(f, "min_fit_score",     p.fit_score?.min_score || 6);
   } catch (e) { console.error(e); }
+}
+
+// ── Pipeline board (Phase 8) ─────────────────────────────────────────────────
+function _pipeCard(html) { return `<div class="pipe-card">${html}</div>`; }
+
+function _renderPipeCol(elId, countId, cards, emptyMsg) {
+  const body = $("#" + elId), cnt = $("#" + countId);
+  if (cnt) cnt.textContent = cards.length;
+  if (!body) return;
+  body.innerHTML = cards.length
+    ? cards.join("")
+    : `<div class="pipe-empty">${emptyMsg}</div>`;
+}
+
+async function loadPipeline() {
+  // Loading state
+  ["discovered", "tailored", "applied", "interview"].forEach(s => {
+    const b = $("#pipe-" + s); if (b) b.innerHTML = `<div class="muted small">Loading…</div>`;
+  });
+  try {
+    const [disc, pend, appl] = await Promise.all([
+      api.get("/api/applications/discovered"),
+      api.get("/api/applications/pending"),
+      api.get("/api/applications/applied"),
+    ]);
+
+    // Discovered — show above-threshold first, cap at 40 for a snappy board
+    const dRows = (disc.rows || [])
+      .filter(r => r.above_threshold !== false)
+      .slice(0, 40)
+      .map(r => _pipeCard(
+        `<div class="pc-title">${escapeHtml(r.title || "—")}</div>
+         <div class="pc-company">${escapeHtml(r.company || "")}${r.location ? " · " + escapeHtml(r.location) : ""}</div>
+         <div class="pc-meta">${r.match_pct != null ? `<span class="pc-chip fit">${r.match_pct}% match</span>` : ""}</div>`));
+    _renderPipeCol("pipe-discovered", "pipe-count-discovered", dRows,
+      "No discovered jobs yet. Run a search or turn on background search.");
+
+    // Tailored / ready-to-apply — from pending_review.csv
+    const tRows = (pend.rows || []).map(r => {
+      const ats = r.ats_score || r.ats || "";
+      const hasCopilot = !!(r.folder_path || r.folder);
+      return _pipeCard(
+        `<div class="pc-title">${escapeHtml(r.title || "—")}</div>
+         <div class="pc-company">${escapeHtml(r.company || "")}</div>
+         <div class="pc-meta">
+           ${ats ? `<span class="pc-chip ats">ATS ${escapeHtml(String(ats))}</span>` : ""}
+           ${hasCopilot ? `<span class="pc-chip copilot">Copilot ready</span>` : ""}
+         </div>`);
+    });
+    _renderPipeCol("pipe-tailored", "pipe-count-tailored", tRows,
+      "Nothing tailored yet. Start a run to generate resumes + cover letters.");
+
+    // Applied
+    const aRows = (appl.rows || []).map(r => _pipeCard(
+      `<div class="pc-title">${escapeHtml(r.title || "—")}</div>
+       <div class="pc-company">${escapeHtml(r.company || "")}</div>`));
+    _renderPipeCol("pipe-applied", "pipe-count-applied", aRows,
+      "No applications marked yet. Mark a ready job as applied to track it here.");
+
+    // Interview — no data source yet; honest empty state
+    _renderPipeCol("pipe-interview", "pipe-count-interview", [],
+      "Jobs you advance to interviews will appear here.");
+  } catch (e) {
+    console.error("loadPipeline failed", e);
+    ["discovered", "tailored", "applied", "interview"].forEach(s => {
+      const b = $("#pipe-" + s); if (b) b.innerHTML = `<div class="pipe-empty">Failed to load</div>`;
+    });
+  }
 }
 
 function collectPreferences() {

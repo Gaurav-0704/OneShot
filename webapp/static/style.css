@@ -707,6 +707,23 @@ table.t .num { font-variant-numeric: tabular-nums; font-family: var(--mono); fon
 .req-dot.bad { background: var(--red); }
 .req-dot:hover { transform: scale(1.4); }
 
+/* Pipeline board (Phase 8) */
+.pipeline-board { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; align-items: start; }
+@media (max-width: 1000px) { .pipeline-board { grid-template-columns: repeat(2, 1fr); } }
+.pipe-col { background: var(--glass); border: 1px solid var(--glass-border); border-radius: var(--r-md); overflow: hidden; }
+.pipe-col-head { padding: 10px 12px; font-size: 12.5px; font-weight: 700; border-bottom: 1px solid var(--glass-border); display: flex; align-items: center; gap: 6px; text-transform: uppercase; letter-spacing: .03em; }
+.pipe-count { margin-left: auto; font-size: 11px; background: var(--glass-border); color: var(--text); padding: 1px 8px; border-radius: 99px; }
+.pipe-col-body { padding: 10px; display: flex; flex-direction: column; gap: 8px; max-height: 460px; overflow-y: auto; }
+.pipe-card { background: var(--bg-deep); border: 1px solid var(--glass-border); border-radius: var(--r-sm); padding: 9px 10px; }
+.pipe-card .pc-title { font-size: 13px; font-weight: 600; line-height: 1.25; }
+.pipe-card .pc-company { font-size: 11.5px; color: var(--muted); margin-top: 1px; }
+.pipe-card .pc-meta { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.pc-chip { font-size: 10.5px; padding: 1px 7px; border-radius: 99px; font-weight: 600; }
+.pc-chip.ats  { background: var(--green-soft); color: var(--green); }
+.pc-chip.fit  { background: var(--accent-soft, rgba(79,142,247,.16)); color: var(--accent); }
+.pc-chip.copilot { background: var(--amber-soft); color: var(--amber); }
+.pipe-empty { color: var(--muted); font-size: 12px; text-align: center; padding: 18px 6px; }
+
 /* ── Checkpoint stats ───────────────────────────────────── */
 .checkpoint-stats { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin-bottom: 16px; }
 .checkpoint-stat  { background: var(--glass); border: 1px solid var(--glass-border); border-radius: var(--r-sm); padding: 14px 16px; text-align: center; }
