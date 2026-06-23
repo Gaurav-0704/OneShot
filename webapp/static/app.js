@@ -90,7 +90,7 @@ function switchTab(name) {
   if (tabName === "documents") loadDocuments();
   if (tabName === "profile")   { loadProfile(); renderValidity(); loadShowcaseStatus(); }
   if (tabName === "settings")  { loadEnv(); bindSettingsHandlers(); loadHealth(); loadProviderToggles(); }
-  if (tabName === "search" && subName === "search") { loadStatus(); loadInsights(); }
+  if (tabName === "search" && subName === "search") { loadStatus(); loadInsights(); refreshResumeStatus(); }
 }
 
 // Settings sub-tab (stab) switcher
@@ -640,6 +640,9 @@ function _setDzState(hasResume, filename, sizeKb) {
   const hName  = $("#home-dz-name");
   const hMeta  = $("#home-dz-meta");
   const hDz    = $("#home-dropzone");
+  const sName  = $("#search-dz-name");
+  const sMeta  = $("#search-dz-meta");
+  const sDz    = $("#search-dropzone");
 
   if (hasResume) {
     const label = filename ? `✓ ${filename}` : "✓ Resume on file";
@@ -650,6 +653,9 @@ function _setDzState(hasResume, filename, sizeKb) {
     if (hName) hName.textContent = label;
     if (hMeta) hMeta.textContent = hint;
     if (hDz)  { hDz.style.borderColor = "var(--green,#4caf50)"; hDz.style.borderStyle = "solid"; }
+    if (sName) sName.textContent = label;
+    if (sMeta) sMeta.textContent = hint;
+    if (sDz)   sDz.classList.add("ok-have");
   } else {
     if (name) name.textContent = "Drop PDF / DOCX here or click to browse";
     if (meta) meta.textContent = "PDF recommended · max 10 MB";
@@ -657,6 +663,9 @@ function _setDzState(hasResume, filename, sizeKb) {
     if (hName) hName.textContent = "Upload your resume to get started";
     if (hMeta) hMeta.textContent = "PDF / DOCX · click or drag here";
     if (hDz)  { hDz.style.borderColor = ""; hDz.style.borderStyle = ""; }
+    if (sName) sName.textContent = "Drop your resume here or click to browse — auto-fills your profile";
+    if (sMeta) sMeta.textContent = "PDF / DOCX / DOC / TXT · max 10 MB";
+    if (sDz)   sDz.classList.remove("ok-have");
   }
 }
 
@@ -672,13 +681,16 @@ async function uploadResume(file) {
   if (!file) return;
   // Show filename immediately — before the upload completes
   _setDzState(false);
-  const nameEl = $("#dz-name"); const hNameEl = $("#home-dz-name");
-  const metaEl = $("#dz-meta"); const hMetaEl = $("#home-dz-meta");
+  const nameEl = $("#dz-name"); const hNameEl = $("#home-dz-name"); const sNameEl = $("#search-dz-name");
+  const metaEl = $("#dz-meta"); const hMetaEl = $("#home-dz-meta"); const sMetaEl = $("#search-dz-meta");
   const label = `⏳ Uploading ${file.name}…`;
+  const sizeTxt = `${(file.size/1024).toFixed(0)} KB`;
   if (nameEl)  nameEl.textContent  = label;
   if (hNameEl) hNameEl.textContent = label;
-  if (metaEl)  metaEl.textContent  = `${(file.size/1024).toFixed(0)} KB`;
-  if (hMetaEl) hMetaEl.textContent = `${(file.size/1024).toFixed(0)} KB`;
+  if (sNameEl) sNameEl.textContent = label;
+  if (metaEl)  metaEl.textContent  = sizeTxt;
+  if (hMetaEl) hMetaEl.textContent = sizeTxt;
+  if (sMetaEl) sMetaEl.textContent = sizeTxt;
 
   const fd = new FormData();
   fd.append("file", file);
@@ -692,7 +704,7 @@ async function uploadResume(file) {
 }
 
 async function parseResumeAndFill(overwrite) {
-  const statusEls = [$("#parse-status"), $("#home-parse-status")];
+  const statusEls = [$("#parse-status"), $("#home-parse-status"), $("#search-parse-status")];
   statusEls.forEach(el => { if (el) el.textContent = "Reading resume with AI…"; });
   const res = await api.post("/api/profile/parse-resume", { overwrite });
   if (!res.ok) {
@@ -730,6 +742,14 @@ if (homeFile) homeFile.addEventListener("change", e => {
   else refreshResumeStatus();
 });
 
+// Search-tab Profile Validation file input (same upload→auto-fill flow)
+const searchFile = $("#search-resume-file");
+if (searchFile) searchFile.addEventListener("change", e => {
+  const f = e.target.files[0];
+  if (f) { const sn = $("#search-dz-name"); if (sn) sn.textContent = `${f.name} · ${(f.size/1024).toFixed(0)} KB`; uploadResume(f); }
+  else refreshResumeStatus();
+});
+
 // Drag-and-drop for profile + home dropzones
 const dz = $("#dropzone");
 ["dragenter","dragover"].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.add("drag"); }));
@@ -738,6 +758,15 @@ dz.addEventListener("drop", e => {
   const f = e.dataTransfer.files[0];
   if (f) uploadResume(f);
 });
+const searchDz = $("#search-dropzone");
+if (searchDz) {
+  ["dragenter","dragover"].forEach(ev => searchDz.addEventListener(ev, e => { e.preventDefault(); searchDz.classList.add("drag"); }));
+  ["dragleave","drop"].forEach(ev => searchDz.addEventListener(ev, e => { e.preventDefault(); searchDz.classList.remove("drag"); }));
+  searchDz.addEventListener("drop", e => {
+    const f = e.dataTransfer.files[0];
+    if (f) uploadResume(f);
+  });
+}
 const homeDz = $("#home-dropzone");
 if (homeDz) {
   ["dragenter","dragover"].forEach(ev => homeDz.addEventListener(ev, e => { e.preventDefault(); homeDz.style.borderColor = "var(--accent)"; }));

@@ -311,6 +311,17 @@
           </div>
           <button class="btn tiny" onclick="renderValidity()">↺ Refresh</button>
         </div>
+
+        <!-- Quick resume upload + auto-fill (also on the Profile tab) -->
+        <label class="dropzone" id="search-dropzone" style="cursor:pointer;margin-top:14px">
+          <input type="file" accept=".pdf,.docx,.doc,.txt" hidden id="search-resume-file"/>
+          <div class="dz-inner">
+            <div class="dz-icon">📄</div>
+            <div class="dz-text" id="search-dz-name">Drop your resume here or click to browse — auto-fills your profile</div>
+            <div class="dz-hint" id="search-dz-meta">PDF / DOCX / DOC / TXT · max 10 MB</div>
+          </div>
+        </label>
+        <div id="search-parse-status" class="muted small" style="margin-top:8px"></div>
       </div>
     </div>
 
