@@ -19,7 +19,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from agents.base import Agent
-from core.filter import apply_rule_filters, score_and_filter
+from core.filter import apply_location_filter, apply_rule_filters, score_and_filter
 from core.scraper import df_to_job_dicts, scrape
 from core.tracker import load_applied_ids
 from models import JobApplication, UserProfile
@@ -107,6 +107,11 @@ class DiscoveryAgent(Agent):
         applied_ids = load_applied_ids(self.applied_csv)
         jobs_dicts = apply_rule_filters(jobs_dicts, prefs, applied_ids)
         self.info(f"after rule filter: {len(jobs_dicts)}")
+
+        # Positive geo filter — drop foreign listings the worldwide-remote
+        # scrape leaks in (e.g. China/HK on a US search).
+        jobs_dicts = apply_location_filter(jobs_dicts, prefs)
+        self.info(f"after location filter: {len(jobs_dicts)}")
 
         self.all_scored = list(jobs_dicts)
 

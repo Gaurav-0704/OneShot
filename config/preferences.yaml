@@ -11,6 +11,13 @@ search_terms:
 locations:
 - United States
 - Remote
+# Positive geo filter (Phase 1): only keep jobs in these countries.
+# Leave empty to disable. remote_scope "country" drops foreign remote leaks;
+# "worldwide" keeps remote jobs from anywhere.
+allowed_countries:
+- United States
+allowed_regions: []
+remote_scope: country
 remote: true
 hybrid: false
 onsite: false
