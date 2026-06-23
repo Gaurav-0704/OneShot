@@ -13,14 +13,3 @@ address:
   state: ""
   zipcode: ""
   country: ""
-demographics:
-  gender: ""
-  ethnicity: ""
-  veteran_status: ""
-  disability_status: ""
-work_authorization:
-  us: ""
-  eu: ""
-  uk: ""
-  canada: ""
-  requires_sponsorship: ""

@@ -638,55 +638,8 @@
           <div class="field"><label>City</label><input type="text" name="city" placeholder="San Francisco" autocomplete="address-level2"/></div>
           <div class="field"><label>State / Province</label><input type="text" name="state" placeholder="CA"/></div>
           <div class="field"><label>Country</label><input type="text" name="country" placeholder="United States" autocomplete="country-name"/></div>
-          <div class="field"><label>LinkedIn URL <span class="badge rec">recommended</span></label><input type="url" name="linkedin_url" placeholder="https://linkedin.com/in/…"/></div>
-          <div class="field span-2"><label>GitHub / Portfolio URL</label><input type="url" name="github_url" placeholder="https://github.com/…"/></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Work Authorization -->
-    <div class="card no-lift" id="profile-section-work_auth">
-      <div class="card-head"><h3>Work Authorization</h3></div>
-      <div class="card-body">
-        <div class="grid-2">
-          <div class="field"><label>Work Authorization</label>
-            <select name="work_authorization">
-              <option value="">Select…</option>
-              <option value="us_citizen">US Citizen</option>
-              <option value="us_green_card">Green Card / Permanent Resident</option>
-              <option value="us_h1b">H-1B Visa</option>
-              <option value="us_opt">OPT / CPT (F-1)</option>
-              <option value="other">Other (specify in notes)</option>
-            </select>
-          </div>
-          <div class="field">
-            <label>Requires Sponsorship? <span class="badge req">required</span></label>
-            <div class="yn" data-group="requires_sponsorship">
-              <button type="button" class="no" data-val="false">No</button>
-              <button type="button" class="yes" data-val="true">Yes</button>
-            </div>
-          </div>
-          <div class="field">
-            <label>Open to Relocation?</label>
-            <div class="yn" data-group="open_to_relocation">
-              <button type="button" class="yes" data-val="true">Yes</button>
-              <button type="button" class="no" data-val="false">No</button>
-            </div>
-          </div>
-          <div class="field">
-            <label>Comfortable Remote?</label>
-            <div class="yn" data-group="comfortable_remote">
-              <button type="button" class="yes" data-val="true">Yes</button>
-              <button type="button" class="no" data-val="false">No</button>
-            </div>
-          </div>
-          <div class="field">
-            <label>US Veteran?</label>
-            <div class="yn" data-group="us_veteran">
-              <button type="button" class="no" data-val="false">No</button>
-              <button type="button" class="yes" data-val="true">Yes</button>
-            </div>
-          </div>
+          <div class="field"><label>LinkedIn URL <span class="badge rec">optional</span></label><input type="url" name="linkedin_url" placeholder="https://linkedin.com/in/…"/></div>
+          <div class="field span-2"><label>GitHub / Portfolio URL <span class="badge rec">optional</span></label><input type="url" name="github_url" placeholder="https://github.com/…"/></div>
         </div>
       </div>
     </div>
@@ -701,17 +654,6 @@
         <div class="field">
           <textarea name="summary" rows="5" placeholder="A 2–3 sentence professional bio used in cover letters and applications…"></textarea>
         </div>
-      </div>
-    </div>
-
-    <!-- Q&A bank -->
-    <div class="card no-lift" id="profile-section-qa">
-      <div class="card-head">
-        <h3>Q&amp;A Bank</h3>
-        <span class="muted small">Pre-fill common application questions</span>
-      </div>
-      <div class="card-body" id="qa-fields">
-        <div class="muted small">Loading Q&amp;A fields…</div>
       </div>
     </div>
 
@@ -792,41 +734,11 @@
       </div>
 
       <div class="card no-lift">
-        <div class="card-head"><h3>Application Behavior</h3></div>
+        <div class="card-head"><h3>Resume Tailoring</h3></div>
         <div class="card-body">
           <div class="grid-2">
             <div class="field"><label>ATS Min Score (0–100)</label><input type="number" name="ATS_TARGET_MIN" min="0" max="100" placeholder="80"/></div>
             <div class="field"><label>Max ATS Rewrites</label><input type="number" name="ATS_MAX_REWRITES" min="0" max="5" placeholder="1"/></div>
-            <div class="field"><label>Applier Mode</label>
-              <select name="APPLIER_MODE">
-                <option value="auto">Auto</option>
-                <option value="skyvern">Skyvern</option>
-                <option value="manual">Manual (pause)</option>
-              </select>
-            </div>
-            <div class="field"><label>Skyvern Base URL</label><input type="text" name="SKYVERN_BASE_URL" placeholder="http://localhost:8080"/></div>
-            <div class="field"><label>Skyvern API Key</label><input type="password" name="SKYVERN_API_KEY" placeholder="optional" autocomplete="off"/></div>
-          </div>
-        </div>
-      </div>
-
-      <div class="card no-lift">
-        <div class="card-head"><h3>LinkedIn</h3></div>
-        <div class="card-body">
-          <div class="grid-2">
-            <div class="field"><label>LinkedIn Username / Email</label><input type="text" name="LINKEDIN_USERNAME" autocomplete="off"/></div>
-            <div class="field"><label>LinkedIn Password</label><input type="password" name="LINKEDIN_PASSWORD" autocomplete="off"/></div>
-          </div>
-        </div>
-      </div>
-
-      <div class="card no-lift">
-        <div class="card-head"><h3>Daily Limits</h3></div>
-        <div class="card-body">
-          <div class="grid-3">
-            <div class="field"><label>LinkedIn / day</label><input type="number" name="DAILY_LIMIT_LINKEDIN" min="1" max="100" placeholder="25"/></div>
-            <div class="field"><label>Indeed / day</label><input type="number" name="DAILY_LIMIT_INDEED" min="1" max="100" placeholder="25"/></div>
-            <div class="field"><label>Other / day</label><input type="number" name="DAILY_LIMIT_OTHER" min="1" max="100" placeholder="25"/></div>
           </div>
         </div>
       </div>

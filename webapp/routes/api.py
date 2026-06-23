@@ -113,13 +113,7 @@ def get_profile():
             "email": p.email, "phone": p.phone,
             "linkedin_url": p.linkedin_url, "github_url": p.github_url, "website_url": p.website_url,
             "city": p.city, "state": p.state, "country": p.country, "zipcode": p.zipcode,
-            "gender": p.gender, "ethnicity": p.ethnicity,
-            "veteran_status": p.veteran_status, "disability_status": p.disability_status,
-            "auth_us": p.auth_us, "auth_eu": p.auth_eu, "auth_uk": p.auth_uk,
-            "auth_canada": p.auth_canada, "requires_sponsorship": p.requires_sponsorship,
             "years_of_experience": p.years_of_experience,
-            "desired_salary_usd": p.desired_salary_usd,
-            "notice_period_days": p.notice_period_days,
             "summary": p.summary, "headline": p.headline,
             "user_information_summary": p.user_information_summary,
             "master_resume_path": str(p.master_resume_path or ""),
@@ -340,9 +334,6 @@ def env():
         "llm_provider_smart": (os.environ.get("LLM_PROVIDER_SMART") or "").strip().lower(),
         "llm_provider_cheap": (os.environ.get("LLM_PROVIDER_CHEAP") or "").strip().lower(),
         "claude_budget_usd": float(os.environ.get("CLAUDE_BUDGET_USD", "0") or 0),
-        "applier_mode": (os.environ.get("APPLIER_MODE") or "auto").strip().lower(),
-        "skyvern_base_url": (os.environ.get("SKYVERN_BASE_URL") or "").strip(),
-        "skyvern_api_key_set": bool(os.environ.get("SKYVERN_API_KEY", "").strip()),
         "ats_target_min": int(os.environ.get("ATS_TARGET_MIN", "80") or 80),
         "ats_max_rewrites": int(os.environ.get("ATS_MAX_REWRITES", "1") or 1),
         "llm_model": os.environ.get("LLM_MODEL", ""),
@@ -353,14 +344,6 @@ def env():
         "anthropic_key_mask": _mask(os.environ.get("ANTHROPIC_API_KEY", "")),
         "openai_key_mask":    _mask(os.environ.get("OPENAI_API_KEY", "")),
         "gemini_key_mask":    _mask(os.environ.get("GEMINI_API_KEY", "")),
-        "linkedin_username":  os.environ.get("LINKEDIN_USERNAME", ""),
-        "linkedin_password_set": bool(os.environ.get("LINKEDIN_PASSWORD")),
-        "linkedin_login_set": bool(os.environ.get("LINKEDIN_USERNAME") and os.environ.get("LINKEDIN_PASSWORD")),
-        "dry_run_default": (os.environ.get("DRY_RUN", "true").lower() == "true"),
-        "pause_before_submit": (os.environ.get("PAUSE_BEFORE_SUBMIT", "true").lower() == "true"),
-        "daily_limit_linkedin": int(os.environ.get("DAILY_LIMIT_LINKEDIN", "25") or 25),
-        "daily_limit_indeed":   int(os.environ.get("DAILY_LIMIT_INDEED",   "50") or 50),
-        "daily_limit_other":    int(os.environ.get("DAILY_LIMIT_OTHER",    "20") or 20),
     })
 
 
@@ -399,17 +382,14 @@ def _test_provider_key(provider: str) -> dict:
             r = c.chat.completions.create(model="gpt-4o-mini", max_tokens=10,
                                           messages=[{"role": "user", "content": "Reply with the word OK only."}])
             text = (r.choices[0].message.content or "").strip()
-        else:  # gemini
-            import google.generativeai as genai
-            genai.configure(api_key=key)
-            g = genai.GenerativeModel("gemini-2.5-flash")
-            r = g.generate_content("Reply with the word OK only.")
-            cand = (r.candidates or [None])[0]
-            parts = getattr(getattr(cand, "content", None), "parts", []) or [] if cand else []
-            text = "".join(getattr(p, "text", "") for p in parts).strip()
+        else:  # gemini — new google-genai SDK
+            import google.genai as genai
+            c = genai.Client(api_key=key)
+            r = c.models.generate_content(
+                model="gemini-2.5-flash", contents="Reply with the word OK only.")
+            text = (r.text or "").strip()
             if not text:
-                fr = getattr(cand, "finish_reason", "?") if cand else "?"
-                raise RuntimeError(f"empty response (finish_reason={fr})")
+                raise RuntimeError("empty response from gemini")
         latency = int((time.time() - t0) * 1000)
         # The test call itself counts - so the user sees their counter tick up
         from core.usage import record_call, usage_summary

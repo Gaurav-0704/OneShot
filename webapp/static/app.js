@@ -398,14 +398,6 @@ async function loadEnv() {
       setVal(form, "CLAUDE_BUDGET_USD",  e.claude_budget_usd  || "");
       setVal(form, "ATS_TARGET_MIN",     e.ats_target_min   || 80);
       setVal(form, "ATS_MAX_REWRITES",   e.ats_max_rewrites || 1);
-      setVal(form, "APPLIER_MODE",       e.applier_mode || "auto");
-      setVal(form, "SKYVERN_BASE_URL",   e.skyvern_base_url || "");
-      // Skyvern API key: show masked indicator only, never echo the value
-      if (form.elements["SKYVERN_API_KEY"]) {
-        form.elements["SKYVERN_API_KEY"].placeholder =
-          e.skyvern_api_key_set ? "•••••••• (saved)" : "optional";
-        form.elements["SKYVERN_API_KEY"].value = "";
-      }
 
       // Models
       setVal(form, "LLM_MODEL", e.llm_model || "");
@@ -418,16 +410,6 @@ async function loadEnv() {
       form.elements["ANTHROPIC_API_KEY"].value = "";
       form.elements["OPENAI_API_KEY"].value    = "";
       form.elements["GEMINI_API_KEY"].value    = "";
-
-      // LinkedIn
-      setVal(form, "LINKEDIN_USERNAME", e.linkedin_username || "");
-      form.elements["LINKEDIN_PASSWORD"].value = "";
-      form.elements["LINKEDIN_PASSWORD"].placeholder = e.linkedin_login_set ? "•••••••• (saved)" : "";
-
-      // Behavior
-      setVal(form, "DAILY_LIMIT_LINKEDIN", e.daily_limit_linkedin);
-      setVal(form, "DAILY_LIMIT_INDEED",   e.daily_limit_indeed);
-      setVal(form, "DAILY_LIMIT_OTHER",    e.daily_limit_other);
     }
   } catch (e) { console.error(e); }
 }
@@ -465,8 +447,6 @@ async function saveSettings() {
   const fields = [
     "LLM_MODEL","LLM_MODEL_CHEAP",
     "ANTHROPIC_API_KEY","OPENAI_API_KEY","GEMINI_API_KEY",
-    "LINKEDIN_USERNAME","LINKEDIN_PASSWORD",
-    "DAILY_LIMIT_LINKEDIN","DAILY_LIMIT_INDEED","DAILY_LIMIT_OTHER",
   ];
   fields.forEach(k => {
     const v = (form.elements[k]?.value ?? "").toString();
@@ -481,12 +461,6 @@ async function saveSettings() {
   // ATS rewrite tuning - always send so user can change them
   set["ATS_TARGET_MIN"]    = (form.elements["ATS_TARGET_MIN"]?.value ?? "80").toString();
   set["ATS_MAX_REWRITES"]  = (form.elements["ATS_MAX_REWRITES"]?.value ?? "1").toString();
-  // Applier mode + Skyvern config
-  set["APPLIER_MODE"]      = (form.elements["APPLIER_MODE"]?.value ?? "auto").toString();
-  set["SKYVERN_BASE_URL"]  = (form.elements["SKYVERN_BASE_URL"]?.value ?? "").toString();
-  // Only send Skyvern API key if the user typed something (don't blank the saved one)
-  const sk = (form.elements["SKYVERN_API_KEY"]?.value ?? "").toString();
-  if (sk) set["SKYVERN_API_KEY"] = sk;
   const res = await api.put("/api/env", { set });
   if (res.ok) {
     $("#settings-status").textContent = `Saved: ${res.written.join(", ") || "no changes"}`;
@@ -542,28 +516,8 @@ async function loadProfile() {
     setVal(form, "state",      personal?.address?.state ?? "");
     setVal(form, "zipcode",    personal?.address?.zipcode ?? "");
     setVal(form, "country",    personal?.address?.country ?? "");
-    // Demographics (selects)
-    setVal(form, "gender",     personal?.demographics?.gender ?? "");
-    setVal(form, "ethnicity",  personal?.demographics?.ethnicity ?? "");
-    setVal(form, "veteran_status",   personal?.demographics?.veteran_status ?? "");
-    setVal(form, "disability_status",personal?.demographics?.disability_status ?? "");
-    // Work auth (Yes/No buttons)
-    setYN("auth_us",    personal?.work_authorization?.us ?? "");
-    setYN("auth_eu",    personal?.work_authorization?.eu ?? "");
-    setYN("auth_uk",    personal?.work_authorization?.uk ?? "");
-    setYN("auth_canada",personal?.work_authorization?.canada ?? "");
-    setYN("requires_sponsorship", personal?.work_authorization?.requires_sponsorship ?? "");
-    // Experience / compensation
+    // Experience
     setVal(form, "years_of_experience", questions?.years_of_experience ?? "");
-    setVal(form, "desired_salary_usd",  questions?.desired_salary ?? "");
-    setVal(form, "notice_period_days",  questions?.notice_period_days ?? 30);
-    // Screening Yes/No defaults
-    setYN("willing_to_relocate", questions?.willing_to_relocate ?? "");
-    setYN("willing_to_travel",   questions?.willing_to_travel ?? "");
-    setYN("background_check",    questions?.background_check ?? "");
-    setYN("drug_test",           questions?.drug_test ?? "");
-    setYN("security_clearance",  questions?.security_clearance ?? "");
-    setYN("over_18",             questions?.over_18 ?? "");
     // About
     setVal(form, "headline",            questions?.linkedin_headline ?? "");
     setVal(form, "linkedin_summary",    questions?.linkedin_summary ?? "");
@@ -615,35 +569,13 @@ async function saveProfile() {
       city: getVal(form, "city"), state: getVal(form, "state"),
       zipcode: getVal(form, "zipcode"), country: getVal(form, "country"),
     },
-    demographics: {
-      gender: getVal(form, "gender"),
-      ethnicity: getVal(form, "ethnicity"),
-      veteran_status: getVal(form, "veteran_status"),
-      disability_status: getVal(form, "disability_status"),
-    },
-    work_authorization: {
-      us: getYN("auth_us"),
-      eu: getYN("auth_eu"),
-      uk: getYN("auth_uk"),
-      canada: getYN("auth_canada"),
-      requires_sponsorship: getYN("requires_sponsorship"),
-    },
   };
   // Merge into existing questions.yaml
   const q = await api.get("/api/questions");
   q.years_of_experience      = Number(getVal(form, "years_of_experience") || 0);
-  q.desired_salary           = Number(getVal(form, "desired_salary_usd") || 0);
-  q.notice_period_days       = Number(getVal(form, "notice_period_days") || 30);
   q.linkedin_headline        = getVal(form, "headline");
   q.linkedin_summary         = getVal(form, "linkedin_summary");
   q.user_information_summary = getVal(form, "user_information_summary");
-  // Yes/No screening defaults
-  q.willing_to_relocate = getYN("willing_to_relocate");
-  q.willing_to_travel   = getYN("willing_to_travel");
-  q.background_check    = getYN("background_check");
-  q.drug_test           = getYN("drug_test");
-  q.security_clearance  = getYN("security_clearance");
-  q.over_18             = getYN("over_18");
 
   await api.put("/api/personal", personal);
   await api.put("/api/questions", q);
@@ -838,25 +770,12 @@ const FIELD_VALIDATORS = {
     hint: "Country - e.g. India",
     check: v => (v || "").trim().length >= 2,
   },
-  "personal.work_authorization.us": {
-    yn: "auth_us",
-    hint: "Click Yes or No",
-    check: v => v === "Yes" || v === "No",
-  },
   "questions.years_of_experience": {
     input: "years_of_experience",
     hint: "Whole number 0-60 - e.g. 5",
     check: v => {
       const n = Number(v);
       return Number.isFinite(n) && Number.isInteger(n) && n >= 0 && n <= 60;
-    },
-  },
-  "questions.desired_salary": {
-    input: "desired_salary_usd",
-    hint: "Annual USD - e.g. 100000",
-    check: v => {
-      const n = Number(v);
-      return Number.isFinite(n) && n > 0;
     },
   },
   "questions.user_information_summary": {
@@ -1000,10 +919,7 @@ function jumpToField(fieldPath) {
     "personal.contact.github":  "sec-links",
     "personal.address.city":    "sec-address",
     "personal.address.country": "sec-identity",
-    "personal.work_authorization.us": "sec-auth",
     "questions.years_of_experience":  "sec-experience",
-    "questions.desired_salary":        "sec-experience",
-    "questions.notice_period_days":    "sec-experience",
     "questions.linkedin_headline":     "sec-about",
     "questions.user_information_summary": "sec-about",
     "master_resume":                   "sec-resume",

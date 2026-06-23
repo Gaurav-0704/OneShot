@@ -1,16 +1,17 @@
 """
 run.py - single CLI for the 6-agent OneShot pipeline.
 
+OneShot discovers jobs and writes a tailored resume + cover letter for each.
+It never submits applications — you review and apply yourself.
+
 Commands:
     python run.py serve                   #  recommended: opens the web UI
-    python run.py run                     # CLI pipeline (dry-run by default)
-    python run.py run --no-dry-run        # actually submit
+    python run.py run                     # CLI pipeline (search + tailor)
     python run.py run --limit 5           # cap to 5 applications this run
     python run.py run --no-score          # skip Claude fit-scoring (cheaper)
     python run.py run --no-research       # skip ResearchAgent (faster)
     python run.py run --site linkedin     # restrict to one platform
     python run.py run --resume my.pdf     # different master resume
-    python run.py run --headless          # no visible browser
 
     python run.py profile                 # build & print the UserProfile, no scraping
     python run.py status                  # print today's + lifetime application stats
@@ -71,19 +72,7 @@ def cmd_serve(args) -> int:
 
 
 def cmd_run(args) -> int:
-    dry_run = not args.no_dry_run and os.environ.get("DRY_RUN", "true").lower() != "false"
-    pause = not args.no_pause and os.environ.get("PAUSE_BEFORE_SUBMIT", "true").lower() != "false"
-
-    if not dry_run:
-        print(
-            "\n⚠️  LIVE MODE - applications will be submitted.\n"
-            "   Press Enter to continue, Ctrl+C to abort.\n"
-        )
-        try:
-            input()
-        except KeyboardInterrupt:
-            return 1
-
+    # OneShot only discovers + tailors; it never submits. dry_run stays True.
     # Optional --site override → patch preferences.yaml in memory via env? Simplest:
     # we let DiscoveryAgent read prefs as-is and we modify it post-build via a temp env hack.
     # Cleaner: patch the loaded YAML. We'll read & rewrite into ProfileAgent's flow by
@@ -94,14 +83,14 @@ def cmd_run(args) -> int:
     orch = Orchestrator(
         ROOT,
         master_resume=Path(args.resume) if args.resume else None,
-        dry_run=dry_run,
-        pause=pause,
+        dry_run=True,
+        pause=False,
         run_limit=args.limit,
         score_jobs=not args.no_score,
         do_research=not args.no_research,
         run_ats_check=not args.no_ats,
         require_min_ats=args.min_ats,
-        headless=args.headless,
+        headless=True,
     )
 
     # Apply --site override by patching prefs.yaml in memory. We do this by
@@ -129,8 +118,6 @@ def cmd_profile(args) -> int:
     print(f"  Resume:   {profile.master_resume_path} ({len(profile.master_resume_text)} chars)")
     print()
     print(f"  Years exp:   {profile.years_of_experience}")
-    print(f"  Desired $:   {profile.desired_salary_usd}")
-    print(f"  US auth:     {profile.auth_us}    Sponsorship: {profile.requires_sponsorship}")
     print()
     if profile.github_repos:
         print(f"  GitHub: top {len(profile.github_repos)} repos")
@@ -237,9 +224,7 @@ def build_parser() -> argparse.ArgumentParser:
     ps.add_argument("--no-browser", action="store_true", help="Don't auto-open browser.")
 
     # run
-    pr = sub.add_parser("run", help="Run the full pipeline.")
-    pr.add_argument("--no-dry-run", action="store_true", help="Actually submit applications.")
-    pr.add_argument("--no-pause", action="store_true", help="Don't ask for confirmation before submit.")
+    pr = sub.add_parser("run", help="Run the full pipeline (search + tailor, no submit).")
     pr.add_argument("--no-score", action="store_true", help="Skip Claude fit scoring.")
     pr.add_argument("--no-research", action="store_true", help="Skip ResearchAgent enrichment.")
     pr.add_argument("--no-ats", action="store_true", help="Skip ATS self-check in WriterAgent.")
@@ -248,7 +233,6 @@ def build_parser() -> argparse.ArgumentParser:
     pr.add_argument("--site", choices=["linkedin", "indeed", "greenhouse", "glassdoor", "zip_recruiter"],
                     default=None, help="Restrict to one site.")
     pr.add_argument("--resume", default=None, help="Path to master resume (overrides config).")
-    pr.add_argument("--headless", action="store_true", help="Run browser headless.")
 
     # profile
     pp = sub.add_parser("profile", help="Print the assembled UserProfile.")

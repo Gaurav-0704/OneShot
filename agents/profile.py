@@ -28,25 +28,24 @@ from models import UserProfile
 log = logging.getLogger(__name__)
 
 
+# Only the fields the engine truly needs to search jobs and write a tailored
+# resume + cover letter. Everything auto-apply (work authorization, salary,
+# demographics, sponsorship) has been removed.
 REQUIRED_FIELDS = [
     ("personal.name.first",                 "First name",            "Identity",     "personal.yaml"),
     ("personal.name.last",                  "Last name",             "Identity",     "personal.yaml"),
     ("personal.contact.email",              "Email",                 "Identity",     "personal.yaml"),
-    ("personal.contact.phone",              "Phone",                 "Identity",     "personal.yaml"),
     ("personal.address.city",               "City",                  "Address",      "personal.yaml"),
     ("personal.address.country",            "Country",               "Address",      "personal.yaml"),
-    ("personal.work_authorization.us",      "US work authorization", "Work auth",    "personal.yaml"),
     ("questions.years_of_experience",       "Years of experience",   "Experience",   "questions.yaml"),
-    ("questions.desired_salary",            "Desired salary (USD)",  "Compensation", "questions.yaml"),
     ("questions.user_information_summary",  "Profile summary for AI","About you",    "questions.yaml"),
     ("master_resume",                       "Master resume PDF",     "Resume",       "config/master_resume.pdf"),
 ]
 
+# Nice to have — improves tailoring quality, never blocks a run.
 RECOMMENDED_FIELDS = [
+    ("personal.contact.phone",      "Phone",                "Identity",     "personal.yaml"),
     ("personal.contact.linkedin",   "LinkedIn URL",         "Links",        "personal.yaml"),
-    ("personal.contact.github",     "GitHub URL",           "Links",        "personal.yaml"),
-    ("questions.notice_period_days","Notice period (days)", "Compensation", "questions.yaml"),
-    ("questions.linkedin_headline", "Headline",             "About you",    "questions.yaml"),
 ]
 
 
