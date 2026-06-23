@@ -624,7 +624,7 @@
   </div>
 
   <!-- Resume upload — shown first so new users know to start here -->
-  <div class="card no-lift" style="border:1px solid var(--accent-dim,rgba(79,142,247,.35))">
+  <div class="card no-lift" id="sec-resume" style="border:1px solid var(--accent-dim,rgba(79,142,247,.35))">
     <div class="card-head">
       <h3>📄 Resume <span class="badge req">required</span></h3>
       <div style="display:flex;gap:8px">
@@ -662,32 +662,66 @@
   <form id="profile-form" onsubmit="return false">
 
     <!-- Personal Info -->
-    <div class="card no-lift" id="profile-section-personal">
+    <div class="card no-lift" id="sec-identity">
       <div class="card-head"><h3>Personal Information</h3></div>
       <div class="card-body">
         <div class="grid-2">
-          <div class="field"><label>First Name <span class="badge req">required</span></label><input type="text" name="first_name" placeholder="Jane" autocomplete="given-name"/></div>
-          <div class="field"><label>Last Name  <span class="badge req">required</span></label><input type="text" name="last_name" placeholder="Doe" autocomplete="family-name"/></div>
-          <div class="field"><label>Email <span class="badge req">required</span></label><input type="email" name="email" placeholder="jane@example.com" autocomplete="email"/></div>
-          <div class="field"><label>Phone</label><input type="tel" name="phone" placeholder="+1 555 000 0000" autocomplete="tel"/></div>
-          <div class="field"><label>City</label><input type="text" name="city" placeholder="San Francisco" autocomplete="address-level2"/></div>
-          <div class="field"><label>State / Province</label><input type="text" name="state" placeholder="CA"/></div>
-          <div class="field"><label>Country</label><input type="text" name="country" placeholder="United States" autocomplete="country-name"/></div>
-          <div class="field"><label>LinkedIn URL <span class="badge rec">optional</span></label><input type="url" name="linkedin_url" placeholder="https://linkedin.com/in/…"/></div>
-          <div class="field span-2"><label>GitHub / Portfolio URL <span class="badge rec">optional</span></label><input type="url" name="github_url" placeholder="https://github.com/…"/></div>
+          <div class="field"><label>First Name <span class="badge req">required</span><span class="req-dot" data-field="personal.name.first"></span></label><input type="text" name="first_name" data-required="personal.name.first" placeholder="Jane" autocomplete="given-name"/></div>
+          <div class="field"><label>Last Name <span class="badge req">required</span><span class="req-dot" data-field="personal.name.last"></span></label><input type="text" name="last_name" data-required="personal.name.last" placeholder="Doe" autocomplete="family-name"/></div>
+          <div class="field"><label>Email <span class="badge req">required</span><span class="req-dot" data-field="personal.contact.email"></span></label><input type="email" name="email" data-required="personal.contact.email" placeholder="jane@example.com" autocomplete="email"/></div>
+          <div class="field"><label>Phone <span class="badge rec">optional</span></label><input type="tel" name="phone" placeholder="+1 555 000 0000" autocomplete="tel"/></div>
         </div>
       </div>
     </div>
 
-    <!-- Resume upload -->
-    <!-- Resume card moved to top of profile page -->
+    <!-- Address -->
+    <div class="card no-lift" id="sec-address">
+      <div class="card-head"><h3>Location</h3></div>
+      <div class="card-body">
+        <div class="grid-2">
+          <div class="field"><label>City <span class="badge req">required</span><span class="req-dot" data-field="personal.address.city"></span></label><input type="text" name="city" data-required="personal.address.city" placeholder="San Francisco" autocomplete="address-level2"/></div>
+          <div class="field"><label>State / Province <span class="badge rec">optional</span></label><input type="text" name="state" placeholder="CA"/></div>
+          <div class="field"><label>Country <span class="badge req">required</span><span class="req-dot" data-field="personal.address.country"></span></label><input type="text" name="country" data-required="personal.address.country" placeholder="United States" autocomplete="country-name"/></div>
+        </div>
+      </div>
+    </div>
 
-    <!-- Summary / bio -->
-    <div class="card no-lift" id="profile-section-summary">
-      <div class="card-head"><h3>Professional Summary <span class="badge rec">recommended</span></h3></div>
+    <!-- Links -->
+    <div class="card no-lift" id="sec-links">
+      <div class="card-head"><h3>Links</h3></div>
+      <div class="card-body">
+        <div class="grid-2">
+          <div class="field"><label>LinkedIn URL <span class="badge rec">optional</span></label><input type="url" name="linkedin_url" placeholder="https://linkedin.com/in/…"/></div>
+          <div class="field"><label>GitHub / Portfolio URL <span class="badge rec">optional</span></label><input type="url" name="github_url" placeholder="https://github.com/…"/></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Experience -->
+    <div class="card no-lift" id="sec-experience">
+      <div class="card-head"><h3>Experience</h3></div>
+      <div class="card-body">
+        <div class="grid-2">
+          <div class="field"><label>Years of Experience <span class="badge req">required</span><span class="req-dot" data-field="questions.years_of_experience"></span></label><input type="number" name="years_of_experience" data-required="questions.years_of_experience" min="0" max="60" placeholder="5"/></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- About you -->
+    <div class="card no-lift" id="sec-about">
+      <div class="card-head"><h3>About You</h3></div>
       <div class="card-body">
         <div class="field">
-          <textarea name="summary" rows="5" placeholder="A 2–3 sentence professional bio used in cover letters and applications…"></textarea>
+          <label>Profile summary for AI <span class="badge req">required</span><span class="req-dot" data-field="questions.user_information_summary"></span></label>
+          <textarea name="user_information_summary" data-required="questions.user_information_summary" rows="4" placeholder="3–5 factual sentences other AI agents use as your identity: current role, years, key skills, work-type preferences…"></textarea>
+        </div>
+        <div class="field">
+          <label>Headline <span class="badge rec">optional</span></label>
+          <input type="text" name="headline" placeholder="AI/ML Engineer · LLMs · Python"/>
+        </div>
+        <div class="field">
+          <label>Professional Summary <span class="badge rec">optional</span></label>
+          <textarea name="linkedin_summary" rows="4" placeholder="A longer bio used in cover letters and applications…"></textarea>
         </div>
       </div>
     </div>
