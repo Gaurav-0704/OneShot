@@ -478,8 +478,9 @@
             <summary>Run options</summary>
             <div class="field-grid">
               <div class="field">
-                <label>Max applications to tailor <span class="muted small">(blank = all)</span></label>
+                <label>Number of applications to find &amp; prepare <span class="muted small">(blank = all)</span></label>
                 <input type="number" name="limit" min="1" max="500" placeholder="e.g. 5"/>
+                <div class="field-hint">Stops once this many are successfully saved — failures don't use up the count.</div>
               </div>
               <label class="checkbox-label"><input type="checkbox" name="ats_check" checked/> Run ATS rewrite loop</label>
               <label class="checkbox-label"><input type="checkbox" name="research" checked/> Research company before writing</label>

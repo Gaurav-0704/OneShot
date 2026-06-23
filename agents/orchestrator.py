@@ -148,12 +148,18 @@ class Orchestrator:
         humanizer      = HumanizerAgent(profile, root=self.root)
         packager       = PackagerAgent(profile, pending_csv=self.pending_csv, root=self.root)
 
-        # Decide which candidates get the full package up front. run_limit and
-        # TAILOR_TOP_N both mean "only the top N" — candidates are already sorted
-        # freshest + highest-fit, so a head slice is correct.
-        caps = [n for n in (self.run_limit or 0, tailor_top_n) if n and n > 0]
-        process_n = min(caps) if caps else len(candidates)
-        process_list = candidates[:process_n]
+        # run_limit now means "stop once this many are successfully SAVED to
+        # pending_review" — failures must NOT consume the quota. We still bound
+        # the number of candidates we ATTEMPT with a safety cap so a run can't
+        # loop forever when most jobs fail.
+        target = self.run_limit if (self.run_limit and self.run_limit > 0) else None
+        if target:
+            attempt_cap = min(len(candidates), max(target * 3, target + 10))
+        else:
+            attempt_cap = len(candidates)
+        if tailor_top_n > 0:                      # explicit cost cap on attempts
+            attempt_cap = min(attempt_cap, tailor_top_n)
+        process_list = candidates[:attempt_cap]
         n_skipped = len(candidates) - len(process_list)
 
         import os
@@ -165,11 +171,13 @@ class Orchestrator:
         csv_lock = threading.Lock()
         counters = {"packaged": 0, "failed": 0, "humanized": 0}
         counters_lock = threading.Lock()
+        reached = threading.Event()               # set once `target` are packaged
         total = len(process_list)
         t0 = _time.time()
 
         def _process(idx: int, app: JobApplication) -> None:
-            if self.should_stop():
+            # Skip cheaply once we've saved enough or a stop was requested.
+            if self.should_stop() or reached.is_set():
                 return
             log.info(f"[{idx}/{total}] {app.title} @ {app.company}"
                      + (f"  (fit {app.fit_score}/10)" if app.fit_score else ""))
@@ -198,7 +206,10 @@ class Orchestrator:
             try:
                 with csv_lock:                       # serialize pending_review.csv writes
                     packager.package(app)
-                with counters_lock: counters["packaged"] += 1
+                with counters_lock:
+                    counters["packaged"] += 1
+                    if target and counters["packaged"] >= target:
+                        reached.set()                # enough saved — short-circuit the rest
                 self.on_event(type="job", stage="packaged", title=app.title,
                               company=app.company, ats_score=app.ats_score,
                               fit_score=app.fit_score)
@@ -211,6 +222,9 @@ class Orchestrator:
             for i, app in enumerate(process_list, 1):
                 if self.should_stop():
                     log.info("stop requested - exiting per-job loop")
+                    break
+                if reached.is_set():
+                    log.info(f"reached {target} saved application(s) - stopping")
                     break
                 _process(i, app)
         else:
