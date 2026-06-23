@@ -21,6 +21,7 @@ from pathlib import Path
 from agents.base import Agent
 from core.filter import apply_location_filter, apply_rule_filters, score_and_filter
 from core.scraper import df_to_job_dicts, scrape
+from core.seen_store import SeenStore
 from core.tracker import load_applied_ids
 from models import JobApplication, UserProfile
 
@@ -54,6 +55,8 @@ class DiscoveryAgent(Agent):
         # Side-effect: full scored list (above + below threshold) so the
         # orchestrator can persist a snapshot for the Discovered tab.
         self.all_scored: list[dict] = []
+        # Phase 2: how many genuinely-new jobs this run surfaced.
+        self.new_count: int | None = None
 
     # ── Public API ───────────────────────────────────────────────────────────
 
@@ -113,6 +116,11 @@ class DiscoveryAgent(Agent):
         jobs_dicts = apply_location_filter(jobs_dicts, prefs)
         self.info(f"after location filter: {len(jobs_dicts)}")
 
+        # Phase 2: drop stale postings + jobs already seen in a prior run /
+        # reposts, then remember the rest so they never reappear.
+        jobs_dicts = self._drop_stale(jobs_dicts, prefs)
+        jobs_dicts = self._keep_fresh(jobs_dicts, prefs)
+
         self.all_scored = list(jobs_dicts)
 
         if self.score_jobs:
@@ -125,6 +133,56 @@ class DiscoveryAgent(Agent):
             self.info(f"after fit scoring: {len(jobs_dicts)}")
 
         return [self._to_application(j) for j in jobs_dicts]
+
+    # ── Freshness / repost suppression (Phase 2) ──────────────────────────────
+
+    def _seen_store(self) -> SeenStore:
+        return SeenStore(self.applied_csv.parent / "seen_jobs.sqlite")
+
+    def _keep_fresh(self, jobs: list[dict], prefs: dict) -> list[dict]:
+        """Drop jobs seen in a prior run or reposts; remember the rest.
+        Toggle off with preferences.yaml `fresh_only: false`."""
+        if prefs.get("fresh_only", True) is False:
+            self.new_count = len(jobs)
+            return jobs
+        try:
+            store = self._seen_store()
+            new, stats = store.split_new(jobs)
+            store.record(new)
+            self.new_count = stats["new"]
+            self.info(
+                f"freshness: {stats['new']} new since last run "
+                f"({stats['seen']} already seen, {stats['reposts']} reposts dropped)"
+            )
+            return new
+        except Exception as e:
+            self.warn(f"seen-store unavailable ({e}) - skipping freshness filter")
+            self.new_count = len(jobs)
+            return jobs
+
+    @staticmethod
+    def _drop_stale(jobs: list[dict], prefs: dict) -> list[dict]:
+        """Drop postings older than the date_posted window (when a parseable
+        date is present). Jobs with no date survive — we can't judge them."""
+        max_days = {
+            "6_hours": 1, "12_hours": 1, "24_hours": 1, "today": 1,
+            "48_hours": 2, "3days": 3, "week": 7, "month": 31,
+        }.get(str(prefs.get("date_posted", "week")), None)
+        if not max_days:
+            return jobs
+        from datetime import date
+        today = date.today()
+        kept = []
+        for j in jobs:
+            dp = (j.get("date_posted") or "").strip()[:10]
+            try:
+                d = datetime.strptime(dp, "%Y-%m-%d").date()
+            except Exception:
+                kept.append(j)   # unknown date — keep
+                continue
+            if (today - d).days <= max_days:
+                kept.append(j)
+        return kept
 
     # ── Cache helpers ─────────────────────────────────────────────────────────
 
