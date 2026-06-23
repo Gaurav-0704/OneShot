@@ -685,7 +685,8 @@ async function uploadResume(file) {
   const res = await fetch("/api/profile/upload-resume", { method: "POST", body: fd }).then(r => r.json());
   if (!res.ok) { toast("Upload failed: " + (res.error || ""), "err"); return; }
 
-  _setDzState(true, res.saved_as, (res.size_bytes / 1024).toFixed(0));
+  // Show the user's ORIGINAL filename (not the saved master_resume.* name).
+  _setDzState(true, file.name, (res.size_bytes / 1024).toFixed(0));
   toast("Resume uploaded — auto-filling profile…", "ok");
   await parseResumeAndFill(false);
 }
@@ -717,14 +718,16 @@ $("#btn-parse-resume-overwrite").addEventListener("click", () => {
 // Profile tab file input
 $("#resume-file").addEventListener("change", e => {
   const f = e.target.files[0];
-  if (f) uploadResume(f);
+  if (f) { _setDzState(false); $("#dz-name").textContent = `${f.name} · ${(f.size/1024).toFixed(0)} KB`; uploadResume(f); }
+  else refreshResumeStatus();   // selection cleared → reset to real state
 });
 
 // Home tab file input
 const homeFile = $("#home-resume-file");
 if (homeFile) homeFile.addEventListener("change", e => {
   const f = e.target.files[0];
-  if (f) uploadResume(f);
+  if (f) { const hn = $("#home-dz-name"); if (hn) hn.textContent = `${f.name} · ${(f.size/1024).toFixed(0)} KB`; uploadResume(f); }
+  else refreshResumeStatus();
 });
 
 // Drag-and-drop for profile + home dropzones
