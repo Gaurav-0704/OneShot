@@ -20,7 +20,7 @@ python run.py run      # CLI: search + tailor, results land in pending_review.cs
 | **Resume** | One generic file sent everywhere | A unique resume per job, rewritten with that job's keywords |
 | **ATS quality** | None | Score → rewrite loop until your target ATS score is hit |
 | **Job fit** | Keyword match only | An LLM scores each job 1–10 against your real resume; you set the cutoff |
-| **LLM cost** | One provider, no fallback | Gemini (free) → Claude (quality) → OpenAI, auto-switches on rate-limit |
+| **LLM cost** | Opaque routing | One provider you pick (Claude/OpenAI/Gemini) runs the whole engine — no surprise spend |
 | **Who applies** | The bot auto-submits in the background | **You do** — OneShot stops at finished documents |
 | **Your data** | A cloud subscription service | 100% local — your resume and history never leave your machine |
 | **Bad LLM output** | Crashes | 4-stage JSON repair recovers it |
@@ -47,17 +47,24 @@ The rewrite prompt carries the previous score, the missing keywords, and the aud
 
 On the benchmark this improves average ATS scores by ~16 points and gets roughly 3× more applications past target vs single-pass generation.
 
-### 2. Multi-provider cost arbitrage with live fallback
+### 2. Single-provider engine — your choice, end to end
 
-Three LLM providers are wired in parallel:
+You pick ONE provider in Settings (`LLM_PROVIDER`) and the whole pipeline —
+scoring, resume, cover letters, copilot, parsing — runs on it. No
+cross-provider fallback and no surprise spend on a provider you didn't choose.
 
-| Provider | Default use | Why |
+| Provider | Smart model (writing) | Cheap model (scoring/parse) |
 |---|---|---|
-| Gemini 2.5 Flash | Scoring, filtering, audits | Free tier; fast enough for batch work |
-| Claude Sonnet | Resume + cover-letter writing | Best output quality for writing |
-| OpenAI GPT-4o | Fallback | Reliable when the others rate-limit |
+| Claude *(default)* | claude-sonnet-4-6 | claude-haiku-4-5 |
+| OpenAI | gpt-4o | gpt-4o-mini |
+| Gemini | gemini-2.5-pro | gemini-2.5-flash |
 
-If a provider returns a 429 or quota error mid-run — or its key is missing, or its SDK isn't installed — the client automatically retries with the next usable provider. No user action, no dropped jobs. You can disable any provider or force one in the Settings tab.
+The two tiers are just two models of the **same** provider. If the selected
+provider fails, OneShot raises a clear message ("Selected provider X failed…
+check the key in Settings or switch provider") instead of silently switching.
+`LLM_MODEL` / `LLM_MODEL_CHEAP` override the models, but only when they belong
+to the selected provider. (The old `LLM_PROVIDER_SMART` / `LLM_PROVIDER_CHEAP`
+routing was removed.)
 
 Cost is tracked per provider and shown in Settings after each run.
 
@@ -237,7 +244,7 @@ outputs/
 
 ## A few things to know
 
-The LLM is used for scoring fit, writing resumes and cover letters, and building company briefs. The default is Claude Sonnet for writing and a cheap model (Gemini Flash / Claude Haiku) for everything else. Switch providers in the Settings tab or `.env`.
+The LLM is used for scoring fit, writing resumes and cover letters, and building company briefs — all on the single provider you select in Settings (`LLM_PROVIDER`, default Claude). The smart model writes; the cheap model of the same provider handles scoring/parsing. Switch providers in the Settings tab or `.env`.
 
 OneShot reads job boards that don't love being scraped, so keep your runs reasonable. But since it never logs in or submits on your behalf, there's no auto-apply footprint on your accounts.
 
