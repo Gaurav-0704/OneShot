@@ -582,27 +582,15 @@
     </div>
   </div>
 
-  <!-- Kanban pipeline board (Phase 8) -->
-  <div class="pipeline-board" id="pipeline-board">
-    <div class="pipe-col" data-stage="discovered">
-      <div class="pipe-col-head">🔍 Discovered <span class="pipe-count" id="pipe-count-discovered">—</span></div>
-      <div class="pipe-col-body" id="pipe-discovered"><div class="muted small">Loading…</div></div>
-    </div>
-    <div class="pipe-col" data-stage="tailored">
-      <div class="pipe-col-head">✍️ Tailored <span class="pipe-count" id="pipe-count-tailored">—</span></div>
-      <div class="pipe-col-body" id="pipe-tailored"><div class="muted small">Loading…</div></div>
-    </div>
-    <div class="pipe-col" data-stage="applied">
-      <div class="pipe-col-head">✅ Applied <span class="pipe-count" id="pipe-count-applied">—</span></div>
-      <div class="pipe-col-body" id="pipe-applied"><div class="muted small">Loading…</div></div>
-    </div>
-    <div class="pipe-col" data-stage="interview">
-      <div class="pipe-col-head">🎤 Interview <span class="pipe-count" id="pipe-count-interview">—</span></div>
-      <div class="pipe-col-body" id="pipe-interview"><div class="muted small">Loading…</div></div>
-    </div>
+  <!-- Top summary widgets (Phase 8) -->
+  <div class="pipe-stats" id="pipeline-stats">
+    <div class="pipe-stat"><div class="ps-num" id="pipe-count-discovered">—</div><div class="ps-label">🔍 Discovered</div></div>
+    <div class="pipe-stat"><div class="ps-num" id="pipe-count-tailored">—</div><div class="ps-label">✍️ Tailored</div></div>
+    <div class="pipe-stat"><div class="ps-num" id="pipe-count-applied">—</div><div class="ps-label">✅ Applied</div></div>
+    <div class="pipe-stat"><div class="ps-num" id="pipe-count-interview">—</div><div class="ps-label">🎤 Interview</div></div>
   </div>
 
-  <h3 style="margin:22px 0 10px">Ready to apply</h3>
+  <h3 style="margin:22px 0 10px">Prepared applications</h3>
   <div id="pending-table"><div class="empty"><div class="empty-icon">⚡</div><div class="empty-title">No jobs pending review</div><div class="empty-sub">Run a search to queue jobs</div></div></div>
 </section>
 

@@ -1051,71 +1051,24 @@ async function loadPreferences() {
   } catch (e) { console.error(e); }
 }
 
-// ── Pipeline board (Phase 8) ─────────────────────────────────────────────────
-function _pipeCard(html) { return `<div class="pipe-card">${html}</div>`; }
-
-function _renderPipeCol(elId, countId, cards, emptyMsg) {
-  const body = $("#" + elId), cnt = $("#" + countId);
-  if (cnt) cnt.textContent = cards.length;
-  if (!body) return;
-  body.innerHTML = cards.length
-    ? cards.join("")
-    : `<div class="pipe-empty">${emptyMsg}</div>`;
-}
-
+// ── Pipeline summary widgets (Phase 8) ───────────────────────────────────────
+// The per-job result cards are rendered by loadApplications('pending') →
+// renderPendingTable. This just keeps the four top count widgets current.
 async function loadPipeline() {
-  // Loading state
-  ["discovered", "tailored", "applied", "interview"].forEach(s => {
-    const b = $("#pipe-" + s); if (b) b.innerHTML = `<div class="muted small">Loading…</div>`;
-  });
+  const set = (id, n) => { const el = $("#" + id); if (el) el.textContent = n; };
   try {
     const [disc, pend, appl] = await Promise.all([
       api.get("/api/applications/discovered"),
       api.get("/api/applications/pending"),
       api.get("/api/applications/applied"),
     ]);
-
-    // Discovered — show above-threshold first, cap at 40 for a snappy board
-    const dRows = (disc.rows || [])
-      .filter(r => r.above_threshold !== false)
-      .slice(0, 40)
-      .map(r => _pipeCard(
-        `<div class="pc-title">${escapeHtml(r.title || "—")}</div>
-         <div class="pc-company">${escapeHtml(r.company || "")}${r.location ? " · " + escapeHtml(r.location) : ""}</div>
-         <div class="pc-meta">${r.match_pct != null ? `<span class="pc-chip fit">${r.match_pct}% match</span>` : ""}</div>`));
-    _renderPipeCol("pipe-discovered", "pipe-count-discovered", dRows,
-      "No discovered jobs yet. Run a search or turn on background search.");
-
-    // Tailored / ready-to-apply — from pending_review.csv
-    const tRows = (pend.rows || []).map(r => {
-      const ats = r.ats_score || r.ats || "";
-      const hasCopilot = !!(r.folder_path || r.folder);
-      return _pipeCard(
-        `<div class="pc-title">${escapeHtml(r.title || "—")}</div>
-         <div class="pc-company">${escapeHtml(r.company || "")}</div>
-         <div class="pc-meta">
-           ${ats ? `<span class="pc-chip ats">ATS ${escapeHtml(String(ats))}</span>` : ""}
-           ${hasCopilot ? `<span class="pc-chip copilot">Copilot ready</span>` : ""}
-         </div>`);
-    });
-    _renderPipeCol("pipe-tailored", "pipe-count-tailored", tRows,
-      "Nothing tailored yet. Start a run to generate resumes + cover letters.");
-
-    // Applied
-    const aRows = (appl.rows || []).map(r => _pipeCard(
-      `<div class="pc-title">${escapeHtml(r.title || "—")}</div>
-       <div class="pc-company">${escapeHtml(r.company || "")}</div>`));
-    _renderPipeCol("pipe-applied", "pipe-count-applied", aRows,
-      "No applications marked yet. Mark a ready job as applied to track it here.");
-
-    // Interview — no data source yet; honest empty state
-    _renderPipeCol("pipe-interview", "pipe-count-interview", [],
-      "Jobs you advance to interviews will appear here.");
+    const discovered = (disc.rows || []).filter(r => r.above_threshold !== false).length;
+    set("pipe-count-discovered", discovered);
+    set("pipe-count-tailored", (pend.rows || []).length);
+    set("pipe-count-applied", (appl.rows || []).length);
+    set("pipe-count-interview", 0);   // no interview data source yet
   } catch (e) {
     console.error("loadPipeline failed", e);
-    ["discovered", "tailored", "applied", "interview"].forEach(s => {
-      const b = $("#pipe-" + s); if (b) b.innerHTML = `<div class="pipe-empty">Failed to load</div>`;
-    });
   }
 }
 
@@ -2080,6 +2033,14 @@ function renderPendingTable(rows) {
     const folderPath   = r.folder_path   || r.folder       || "";
     const applyUrl     = r.apply_url     || r.url          || "";
     const jobId        = r.job_id        || `row${i}`;
+    // Build file URLs to open the tailored PDFs via /api/files/tailored/<slug>/<file>
+    const _base   = p => (p || "").replace(/\\/g, "/").replace(/\/+$/, "").split("/").pop();
+    const _parent = p => { const a = (p || "").replace(/\\/g, "/").replace(/\/+$/, "").split("/"); a.pop(); return a.pop() || ""; };
+    const slug = _base(folderPath) || _parent(resumePath) || _parent(coverPath);
+    const fileUrl = (path) => (slug && path)
+      ? `/api/files/tailored/${encodeURIComponent(slug)}/${encodeURIComponent(_base(path))}` : "";
+    const resumeUrl = fileUrl(resumePath);
+    const coverUrl  = fileUrl(coverPath);
     return `
     <div class="card" style="margin-bottom:12px" data-job-id="${escapeHtml(jobId)}">
       <div class="card-head" style="gap:12px;flex-wrap:wrap">
@@ -2093,6 +2054,8 @@ function renderPendingTable(rows) {
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;flex-shrink:0">
           ${applyUrl ? `<a class="btn tiny primary" href="${escapeHtml(applyUrl)}" target="_blank">↗ Open job</a>` : ""}
+          ${resumeUrl ? `<a class="btn tiny" href="${resumeUrl}" target="_blank">📄 Resume</a>` : ""}
+          ${coverUrl ? `<a class="btn tiny" href="${coverUrl}" target="_blank">✉️ Cover letter</a>` : ""}
           ${folderPath ? `<button class="btn tiny" data-act="open-folder" data-path="${escapeHtml(folderPath)}">📁 Open folder</button>` : ""}
           <button class="btn tiny" data-act="toggle-copilot" data-job-id="${escapeHtml(jobId)}">🤖 Copilot</button>
           <button class="btn tiny ok" data-act="mark" data-idx="${i}">✓ Mark applied</button>
