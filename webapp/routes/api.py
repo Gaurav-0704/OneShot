@@ -330,9 +330,7 @@ def env():
             return ""
         return ("•" * max(0, len(v) - 4)) + v[-4:] if len(v) > 4 else "••••"
     return jsonify({
-        "llm_provider": os.environ.get("LLM_PROVIDER", "claude"),
-        "llm_provider_smart": (os.environ.get("LLM_PROVIDER_SMART") or "").strip().lower(),
-        "llm_provider_cheap": (os.environ.get("LLM_PROVIDER_CHEAP") or "").strip().lower(),
+        "llm_provider": (os.environ.get("LLM_PROVIDER", "claude") or "claude").strip().lower(),
         "claude_budget_usd": float(os.environ.get("CLAUDE_BUDGET_USD", "0") or 0),
         "ats_target_min": int(os.environ.get("ATS_TARGET_MIN", "80") or 80),
         "ats_max_rewrites": int(os.environ.get("ATS_MAX_REWRITES", "1") or 1),
@@ -520,6 +518,32 @@ def set_env():
     return jsonify({"ok": True, "written": written})
 
 
+@bp.route("/env", methods=["DELETE"])
+def unset_env():
+    """Remove key(s) from .env and the live process env.
+    Body: {"unset": ["ANTHROPIC_API_KEY", ...]}"""
+    body = request.get_json(silent=True) or {}
+    keys = body.get("unset") or []
+    if isinstance(keys, str):
+        keys = [keys]
+    if not isinstance(keys, list) or not keys:
+        return jsonify({"ok": False, "error": "unset must be a non-empty list"}), 400
+    env_path = _root() / ".env"
+    lines: list[str] = []
+    if env_path.exists():
+        lines = env_path.read_text(encoding="utf-8").splitlines()
+    removed: list[str] = []
+    for k in keys:
+        os.environ.pop(k, None)
+        prefix = f"{k}="
+        new_lines = [ln for ln in lines if not (ln.startswith(prefix) or ln.startswith(f"#{prefix}"))]
+        if len(new_lines) != len(lines):
+            removed.append(k)
+        lines = new_lines
+    env_path.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
+    return jsonify({"ok": True, "removed": removed})
+
+
 # ── Provider enable/disable toggles ─────────────────────────────────────────
 
 @bp.route("/providers", methods=["GET"])
@@ -537,11 +561,10 @@ def get_providers():
             "enabled": _enabled(p),
             "has_key": bool(key and not key.endswith("...")),
         })
-    # Also return current cheap/smart routing
+    # Single-provider engine: the active provider is LLM_PROVIDER.
     return jsonify({
         "providers": out,
-        "cheap_tier": os.environ.get("LLM_PROVIDER_CHEAP", "").strip() or "auto",
-        "smart_tier": os.environ.get("LLM_PROVIDER_SMART", "").strip() or "auto",
+        "active_provider": (os.environ.get("LLM_PROVIDER", "claude") or "claude").strip().lower(),
     })
 
 
