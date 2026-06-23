@@ -202,19 +202,29 @@ class Orchestrator:
             except Exception as e:
                 log.warning(f"   humanizer failed (non-fatal): {e}")
 
+            # Atomically CLAIM a slot before packaging so parallel workers can
+            # never overshoot the target (this is what caused "asked 5, got 8").
+            # A failed package releases its slot so failures don't use up quota.
+            with counters_lock:
+                if target and counters["packaged"] >= target:
+                    reached.set()
+                    return                            # already have enough — discard this extra
+                counters["packaged"] += 1
+                if target and counters["packaged"] >= target:
+                    reached.set()
             try:
                 with csv_lock:                       # serialize pending_review.csv writes
                     packager.package(app)
-                with counters_lock:
-                    counters["packaged"] += 1
-                    if target and counters["packaged"] >= target:
-                        reached.set()                # enough saved — short-circuit the rest
                 self.on_event(type="job", stage="packaged", title=app.title,
                               company=app.company, ats_score=app.ats_score,
                               fit_score=app.fit_score)
             except Exception as e:
                 log.error(f"   packager crashed: {e}")
-                with counters_lock: counters["failed"] += 1
+                with counters_lock:
+                    counters["packaged"] -= 1         # release the claimed slot
+                    counters["failed"] += 1
+                    if target and counters["packaged"] < target:
+                        reached.clear()               # let another worker fill it
 
         log.info(f"tailoring {total} job(s) with {workers} parallel worker(s)")
         if workers == 1:
