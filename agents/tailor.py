@@ -403,30 +403,9 @@ class TailorAgent(Agent):
         )
 
     def _complete_with_fallback(self, system: str, user: str) -> str:
-        """Try the smart-tier provider; silently fall back on 429/quota errors."""
-        from llm.client import _get_provider, _provider_has_real_key  # type: ignore
-        primary = _get_provider("smart")
-        try:
-            return complete(system, user, max_tokens=8000, json_mode=True)
-        except Exception as e:
-            msg = str(e)
-            is_quota = (
-                "429" in msg or "quota" in msg.lower()
-                or "rate limit" in msg.lower() or "exceeded" in msg.lower()
-            )
-            if not is_quota:
-                raise
-            for fb in ("claude", "openai", "gemini"):
-                if fb == primary:
-                    continue
-                if _provider_has_real_key(fb):  # type: ignore
-                    self.warn(
-                        f"smart provider '{primary}' hit quota; "
-                        f"falling back to '{fb}' for this writer call"
-                    )
-                    return complete(system, user, provider=fb,
-                                    max_tokens=8000, json_mode=True)
-            raise
+        """Single-provider smart-tier writer call. No cross-provider fallback —
+        the client raises a clear error if the selected provider fails."""
+        return complete(system, user, max_tokens=8000, json_mode=True)
 
     @staticmethod
     def _parse_writer_response(raw: str) -> dict | None:
