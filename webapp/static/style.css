@@ -874,11 +874,17 @@ table.t .num { font-variant-numeric: tabular-nums; font-family: var(--mono); fon
 .mobile-menu-btn { display: none; }
 
 @media (max-width: 860px) {
+  /* IMPORTANT: .layout sets z-index:1 which would trap the sidebar's z-index
+     below the body-level overlay, so taps on the nav hit the overlay instead.
+     Drop the trapping context on mobile so the sidebar (z:250) beats the
+     overlay (z:150). The bg-canvas is z:0 fixed, so content still paints above it. */
+  .layout { z-index: auto; }
+
   /* Top bar with hamburger */
   .mobile-topbar {
     display: flex; align-items: center; gap: 12px;
     position: fixed; top: 0; left: 0; right: 0; height: 52px;
-    padding: 0 14px; z-index: 300;
+    padding: 0 14px; z-index: 240;
     background: var(--sb-bg);
     backdrop-filter: blur(24px) saturate(1.6);
     -webkit-backdrop-filter: blur(24px) saturate(1.6);
@@ -895,11 +901,12 @@ table.t .num { font-variant-numeric: tabular-nums; font-family: var(--mono); fon
     font-size: 15px; font-weight: 800; letter-spacing: -0.03em; color: var(--text);
   }
 
-  /* Sidebar slides in from the left */
+  /* Sidebar slides in from the left, ABOVE the overlay so its nav is tappable */
   .sidebar {
     transform: translateX(-100%);
     transition: transform 0.22s ease;
     width: 78vw; min-width: 0; max-width: 320px;
+    z-index: 250;
   }
   body.nav-open .sidebar { transform: translateX(0); }
 
