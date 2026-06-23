@@ -31,7 +31,18 @@ def start():
 
     options = request.get_json(silent=True) or {}
     run_id = runner.start(options)
-    return jsonify({"ok": True, "run_id": run_id})
+
+    # Auto-start continuous background discovery so fresh matches keep flowing
+    # without the user having to click Start on the background-search card.
+    bg = current_app.config.get("BG_DISCOVERY")
+    bg_status = None
+    if bg:
+        try:
+            bg_status = bg.start()
+        except Exception:
+            bg_status = None
+
+    return jsonify({"ok": True, "run_id": run_id, "background": bg_status})
 
 
 @bp.route("/state", methods=["GET"])
