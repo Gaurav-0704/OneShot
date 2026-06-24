@@ -333,7 +333,7 @@ def env():
         "llm_provider": (os.environ.get("LLM_PROVIDER", "claude") or "claude").strip().lower(),
         "claude_budget_usd": float(os.environ.get("CLAUDE_BUDGET_USD", "0") or 0),
         "ats_target_min": int(os.environ.get("ATS_TARGET_MIN", "80") or 80),
-        "ats_max_rewrites": int(os.environ.get("ATS_MAX_REWRITES", "1") or 1),
+        "ats_max_rewrites": int(os.environ.get("ATS_MAX_REWRITES", "1") or 1),  # 1 = rewrite loop on
         "llm_model": os.environ.get("LLM_MODEL", ""),
         "llm_model_cheap": os.environ.get("LLM_MODEL_CHEAP", ""),
         "anthropic_key_set": bool(os.environ.get("ANTHROPIC_API_KEY")),
