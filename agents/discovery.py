@@ -99,27 +99,36 @@ class DiscoveryAgent(Agent):
                 )
 
         self.info(f"sites={prefs.get('sites')} terms={prefs.get('search_terms')}")
-        df = scrape(prefs, limit=self.limit)
-        if df.empty:
-            self.warn("no jobs scraped")
+
+        # Scrape — auto-widen the date window if a too-narrow one returns
+        # nothing. Freshest-first: we try the user's window, then widen only
+        # when it comes back empty, so a 6-hour window never silently zeroes.
+        df, used_window = self._scrape_widening(prefs)
+        raw = 0 if df is None or df.empty else len(df)
+        if raw == 0:
+            self.warn(
+                "0 jobs scraped from the job boards. The usual cause on a hosted "
+                "server is the boards blocking its datacenter IP — try a wider "
+                "date window, more search terms, or running locally."
+            )
             self.all_scored = []
+            self.new_count = 0
             return []
+
         jobs_dicts = df_to_job_dicts(df)
-        self.info(f"raw jobs scraped: {len(jobs_dicts)}")
 
         applied_ids = load_applied_ids(self.applied_csv)
         jobs_dicts = apply_rule_filters(jobs_dicts, prefs, applied_ids)
-        self.info(f"after rule filter: {len(jobs_dicts)}")
+        n_rule = len(jobs_dicts)
 
-        # Positive geo filter — drop foreign listings the worldwide-remote
-        # scrape leaks in (e.g. China/HK on a US search).
         jobs_dicts = apply_location_filter(jobs_dicts, prefs)
-        self.info(f"after location filter: {len(jobs_dicts)}")
+        n_geo = len(jobs_dicts)
 
-        # Phase 2: drop stale postings + jobs already seen in a prior run /
-        # reposts, then remember the rest so they never reappear.
         jobs_dicts = self._drop_stale(jobs_dicts, prefs)
+        n_stale = len(jobs_dicts)
+
         jobs_dicts = self._keep_fresh(jobs_dicts, prefs)
+        n_fresh = len(jobs_dicts)
 
         self.all_scored = list(jobs_dicts)
 
@@ -130,14 +139,15 @@ class DiscoveryAgent(Agent):
                 jobs_dicts, self.profile.master_resume_text, prefs,
                 on_all_scored=_capture_all,
             )
-            self.info(f"after fit scoring: {len(jobs_dicts)}")
+        n_scored = len(jobs_dicts)
 
+        # One-line funnel so the exact drop point is always visible in the log.
+        self.info(
+            f"discovery funnel [{used_window}]: scraped={raw} -> rule={n_rule} -> "
+            f"geo={n_geo} -> fresh={n_stale}/{n_fresh} -> kept={n_scored}"
+        )
         if not jobs_dicts:
-            self.warn(
-                "0 jobs to tailor after filtering. Common causes: job boards "
-                "blocked this server's IP (0 scraped), search terms too narrow, "
-                "date window too short, or fit threshold too high."
-            )
+            self.warn(self._explain_zero(raw, n_rule, n_geo, n_fresh, n_scored, prefs))
 
         # Remember ONLY what we surface, so re-runs skip already-shown jobs
         # without zeroing out future runs.
@@ -145,6 +155,47 @@ class DiscoveryAgent(Agent):
             self.record_surfaced(jobs_dicts)
 
         return [self._to_application(j) for j in jobs_dicts]
+
+    # ── Scrape with adaptive date-window widening ─────────────────────────────
+
+    _WINDOWS = ["6_hours", "12_hours", "24_hours", "48_hours", "3days", "week", "month"]
+
+    def _scrape_widening(self, prefs: dict):
+        """Scrape at the configured date window; if empty, widen step by step
+        (freshest-first) until jobs appear or we hit 'month'. Returns
+        (DataFrame|None, window_used)."""
+        configured = str(prefs.get("date_posted", "week"))
+        try:
+            start = self._WINDOWS.index(configured)
+        except ValueError:
+            start = self._WINDOWS.index("week")
+        # Cap at 4 attempts so an IP-blocked server doesn't make 7 slow scrapes.
+        for window in self._WINDOWS[start:start + 4]:
+            p = dict(prefs)
+            p["date_posted"] = window
+            df = scrape(p, limit=self.limit)
+            if df is not None and not df.empty:
+                if window != configured:
+                    self.info(f"date window '{configured}' returned nothing — widened to '{window}'")
+                return df, window
+        return None, configured
+
+    @staticmethod
+    def _explain_zero(raw, n_rule, n_geo, n_fresh, n_scored, prefs) -> str:
+        """Turn a zero result into one actionable sentence pointing at the stage
+        that dropped everything."""
+        if n_rule == 0:
+            return f"All {raw} scraped jobs were removed by blacklist/already-applied filters — relax your blacklists."
+        if n_geo == 0:
+            allowed = prefs.get("allowed_countries") or []
+            return (f"All {n_rule} jobs were dropped by the location filter (allowed: {allowed}). "
+                    "Add countries, or set Remote Scope to 'worldwide'.")
+        if n_fresh == 0:
+            return "Every match was already shown in a previous run — uncheck 'Only show new jobs' to see them again."
+        if n_scored == 0:
+            ms = (prefs.get("fit_score") or {}).get("min_score", 6)
+            return f"{n_fresh} jobs scored below your fit threshold ({ms}/10) — lower it or widen your search terms."
+        return "0 jobs after filtering — widen your date window, search terms, or fit threshold."
 
     # ── Freshness / repost suppression (Phase 2) ──────────────────────────────
 
