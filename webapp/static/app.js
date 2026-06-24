@@ -345,6 +345,29 @@ function toast(msg, kind="", durationMs=60000) {
   toast._t = setTimeout(() => { el.hidden = true; }, durationMs);
 }
 
+// ── Count cache: repaint last-known values instantly so a refresh never
+//    flashes misleading zeros while the async fetches are in flight. ────────
+const _COUNT_IDS = [
+  "stat-applied-today", "stat-applied-life", "stat-pending-life", "stat-failed-life",
+  "count-applied", "count-pending", "count-applied-sub", "count-failed",
+  "count-discovered", "pipe-count-discovered", "pipe-count-tailored",
+  "pipe-count-applied", "pipe-count-interview",
+];
+function cacheCounts() {
+  const m = {};
+  _COUNT_IDS.forEach(id => { const el = $("#" + id); if (el) m[id] = el.textContent; });
+  try { localStorage.setItem("oneshot_counts", JSON.stringify(m)); } catch (_) {}
+}
+function restoreCounts() {
+  try {
+    const m = JSON.parse(localStorage.getItem("oneshot_counts") || "{}");
+    Object.entries(m).forEach(([id, v]) => {
+      const el = $("#" + id);
+      if (el && v != null && v !== "" && v !== "—") el.textContent = v;
+    });
+  } catch (_) {}
+}
+
 // ── Dashboard / status ───────────────────────────────────────────────────
 
 async function loadStatus() {
@@ -365,6 +388,7 @@ async function loadStatus() {
     // Live badge visibility in sidebar
     const liveBadge = $("#nav-badge-live");
     if (liveBadge) liveBadge.hidden = !s.runner_running;
+    cacheCounts();
   } catch (e) { console.error(e); }
 }
 
@@ -1110,6 +1134,7 @@ async function loadPipeline() {
     set("pipe-count-tailored", (pend.rows || []).length);
     set("pipe-count-applied", (appl.rows || []).length);
     set("pipe-count-interview", 0);   // no interview data source yet
+    cacheCounts();
   } catch (e) {
     console.error("loadPipeline failed", e);
   }
@@ -1634,7 +1659,7 @@ async function loadDiscovered() {
   </div>`;
   target.innerHTML = summary + `<table class="t">
     <thead><tr>
-      <th>Match</th><th>Site</th><th>Company</th><th>Title</th>
+      <th>Match</th><th>Posted</th><th>Site</th><th>Company</th><th>Title</th>
       <th>Location</th><th>Salary</th><th>Why</th><th></th>
     </tr></thead>
     <tbody>${data.rows.map(r => {
@@ -1650,6 +1675,7 @@ async function loadDiscovered() {
       return `
       <tr style="${above ? '' : 'opacity:.7'}">
         <td><span class="pill ${matchCls}">${pctStr}</span></td>
+        <td class="small">${freshnessChip(r.date_posted)}</td>
         <td><span class="pill acc">${escapeHtml(r.site || '')}</span></td>
         <td>${escapeHtml(r.company || '')}</td>
         <td>${escapeHtml(r.title || '')}</td>
@@ -1693,6 +1719,18 @@ function formatSalary(min, max) {
   if (!min) return "";
   const fmt = (n) => `$${Math.round(n/1000)}k`;
   return max && max !== min ? `${fmt(min)}–${fmt(max)}` : fmt(min);
+}
+
+// Freshness chip — the earlier you apply, the better. date_posted is date-only.
+function freshnessChip(dp) {
+  if (!dp) return "";
+  const s = String(dp).slice(0, 10);
+  const d = new Date(s + "T00:00:00");
+  if (isNaN(d)) return "";
+  const days = Math.floor((Date.now() - d.getTime()) / 86400000);
+  if (days <= 0) return `<span class="pill ok" title="Posted today — apply early!">🔥 Today</span>`;
+  if (days === 1) return `<span class="pill warn" title="Posted yesterday">1d ago</span>`;
+  return `<span class="muted small" title="Posted ${s}">${days}d ago</span>`;
 }
 
 // ── Showcase PDF ─────────────────────────────────────────────────────────────
@@ -1747,6 +1785,7 @@ async function loadShowcaseStatus() {
 // ── Boot ────────────────────────────────────────────────────────────────
 
 (function init() {
+  restoreCounts();        // paint last-known counts instantly (no zero flash)
   renderYNGroups();
   bindJumps();
 
@@ -2092,18 +2131,19 @@ function renderPendingTable(rows) {
       <div class="card-head" style="gap:12px;flex-wrap:wrap">
         <div style="flex:1;min-width:200px">
           <div style="font-size:15px;font-weight:700">${escapeHtml(r.title || "Untitled")}</div>
-          <div class="muted small" style="margin-top:3px">
-            ${escapeHtml(r.company || "")}
-            ${r.location ? " &nbsp;·&nbsp; " + escapeHtml(r.location) : ""}
-            ${r.site || r.applier ? `&nbsp;·&nbsp; <span class="pill acc">${escapeHtml(r.site || r.applier || "")}</span>` : ""}
+          <div class="muted small" style="margin-top:3px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <span>${escapeHtml(r.company || "")}${r.location ? " · " + escapeHtml(r.location) : ""}</span>
+            ${r.site || r.applier ? `<span class="pill acc">${escapeHtml(r.site || r.applier || "")}</span>` : ""}
+            ${freshnessChip(r.date_posted)}
           </div>
+          ${r.fit_reason ? `<div class="muted small" style="margin-top:5px;max-width:560px">💡 ${escapeHtml(String(r.fit_reason).slice(0,140))}</div>` : ""}
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;flex-shrink:0">
           ${applyUrl ? `<a class="btn tiny primary" href="${escapeHtml(applyUrl)}" target="_blank">↗ Open job</a>` : ""}
           ${resumeUrl ? `<a class="btn tiny" href="${resumeUrl}" target="_blank">📄 Resume</a>` : ""}
           ${coverUrl ? `<a class="btn tiny" href="${coverUrl}" target="_blank">✉️ Cover letter</a>` : ""}
           ${folderPath ? `<button class="btn tiny" data-act="open-folder" data-path="${escapeHtml(folderPath)}">📁 Open folder</button>` : ""}
-          <button class="btn tiny" data-act="toggle-copilot" data-job-id="${escapeHtml(jobId)}">🤖 Copilot</button>
+          <button class="btn tiny primary" data-act="toggle-copilot" data-job-id="${escapeHtml(jobId)}" title="Ready-made answers to application questions for this job">🤖 Copilot answers</button>
           <button class="btn tiny ok" data-act="mark" data-idx="${i}">✓ Mark applied</button>
           <button class="btn tiny ghost danger" data-act="dismiss" data-idx="${i}">✕ Dismiss</button>
         </div>
