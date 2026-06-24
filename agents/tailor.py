@@ -289,8 +289,10 @@ class TailorAgent(Agent):
             Path(__file__).resolve().parent.parent
         )
         target_score = int(os.environ.get("ATS_TARGET_MIN", "80") or 80)
-        # Phase 4: rewrite pass is opt-in (default 0) — keeps full-batch runs fast.
-        max_rewrites = int(os.environ.get("ATS_MAX_REWRITES", "0") or 0)
+        # One rewrite pass by default — the score→rewrite loop is the headline
+        # differentiator. Set ATS_MAX_REWRITES=0 to skip it for speed, or higher
+        # to push harder toward the target.
+        max_rewrites = int(os.environ.get("ATS_MAX_REWRITES", "1") or 1)
 
         self.info(f"writing for {app.title} @ {app.company} (target ATS >= {target_score})")
 
