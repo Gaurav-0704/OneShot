@@ -312,12 +312,17 @@ async function loadSettingsErrors() {
 
 // ── API helpers ──────────────────────────────────────────────────────────
 
+// If the session expired (password gate enabled), bounce to the login page.
+function _checkAuth(r) {
+  if (r.status === 401) { window.location.href = "/login"; throw new Error("unauthorized"); }
+  return r;
+}
 const api = {
   // Cache-bust GETs so the browser doesn't serve stale JSON after a PUT
   get:  (u) => fetch(u + (u.includes("?") ? "&" : "?") + "_t=" + Date.now(),
-                     { cache: "no-store" }).then(r => r.json()),
-  put:  (u, body) => fetch(u, { method: "PUT", headers: {"Content-Type":"application/json"}, body: JSON.stringify(body) }).then(r => r.json()),
-  post: (u, body) => fetch(u, { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(body || {}) }).then(r => r.json()),
+                     { cache: "no-store" }).then(_checkAuth).then(r => r.json()),
+  put:  (u, body) => fetch(u, { method: "PUT", headers: {"Content-Type":"application/json"}, body: JSON.stringify(body) }).then(_checkAuth).then(r => r.json()),
+  post: (u, body) => fetch(u, { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(body || {}) }).then(_checkAuth).then(r => r.json()),
 };
 
 function toast(msg, kind="", durationMs=60000) {
