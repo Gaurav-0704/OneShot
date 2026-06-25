@@ -106,10 +106,15 @@ class DiscoveryAgent(Agent):
         df, used_window = self._scrape_widening(prefs)
         raw = 0 if df is None or df.empty else len(df)
         if raw == 0:
+            sites = [s for s in (prefs.get("sites") or [])]
+            others = [s for s in ["indeed", "google", "zip_recruiter", "glassdoor"] if s not in sites]
+            tip = (f" LinkedIn often blocks hosted servers - in Search Setup, add other "
+                   f"sites ({', '.join(others[:3]) or 'indeed, google'}) and try again."
+                   if "linkedin" in sites else
+                   " Try enabling more sites, widening the date window, or broader search terms.")
             self.warn(
-                "0 jobs scraped from the job boards. The usual cause on a hosted "
-                "server is the boards blocking its datacenter IP — try a wider "
-                "date window, more search terms, or running locally."
+                f"0 jobs scraped from {sites or 'the job boards'}. The boards may be "
+                f"blocking this server's IP." + tip
             )
             self.all_scored = []
             self.new_count = 0
