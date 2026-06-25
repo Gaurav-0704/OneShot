@@ -138,18 +138,36 @@ Results save to `outputs/benchmark_<timestamp>.json`.
 
 ---
 
-## Setup
+## Quick start
+
+**Recommended Python: 3.11 or 3.12** (3.13 may fail to build some wheels).
 
 ```bash
+git clone https://github.com/Gaurav-0704/OneShot
 cd OneShot
-py -3.13 setup.py
+python setup.py          # Windows: py -3.12 setup.py
 ```
 
-The setup script creates a virtualenv, installs dependencies, asks for API keys (Gemini has a free tier), and opens the web UI.
+That one command creates a virtualenv (`./venv`), installs dependencies, asks
+for an API key (Gemini has a free tier), and opens the web UI at
+http://127.0.0.1:5001.
 
-Upload your resume in the Profile tab (or drop it at `config/master_resume.pdf`), fill in the short profile, and run.
+Then, in the app:
+1. **Profile tab** → upload your resume (auto-fills your details).
+2. **Settings tab** → confirm your API key and pick a provider (Claude is the default).
+3. **Search & Run** → set your search terms → **Start Run**.
 
-**Minimum to run:** one API key from any provider, plus the required profile fields below.
+**Minimum to run:** one API key from any provider + the required profile fields below.
+
+> **Deploying to a server (Railway/cloud)?** The repo includes `Procfile`,
+> `railway.toml`, `wsgi.py`, and `runtime.txt` for that. They are **deploy-only
+> and ignored when you run locally** — you can leave them untouched. On a public
+> deployment, set `APP_PASSWORD` (see `.env.example`) so only people with the
+> password can use it.
+
+Everything you generate (résumés, cover letters, tracking, logs) stays on your
+own machine under `config/` and `outputs/` — both gitignored, so nothing is ever
+shared or committed.
 
 ---
 
