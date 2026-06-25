@@ -326,7 +326,7 @@ class ProfileAgent(Agent):
         raw = complete_cheap(
             self._EXTRACT_SYSTEM,
             self._extract_user_prompt(resume_text),
-            max_tokens=2048,
+            max_tokens=4096,        # headroom so the JSON doesn't truncate mid-field
             json_mode=True,
         )
         # Robust JSON: try strict, then loose extraction, then regex fallback.
@@ -484,7 +484,35 @@ def _parse_json_loose(raw: str):
         except Exception:
             pass
 
+    # Strategy 4: field-level salvage. When the JSON is truncated (e.g. the model
+    # ran out of tokens mid-way), the EARLY fields — name, email, links, location
+    # — are usually intact even though the object never closes. Pull every
+    # complete "key": value pair out so we keep what we can instead of nothing.
+    salvaged = _salvage_json_fields(text)
+    if salvaged:
+        return salvaged
+
     return None
+
+
+_JSON_STR_FIELD  = re.compile(r'"([A-Za-z_]\w*)"\s*:\s*"((?:[^"\\]|\\.)*)"')
+_JSON_NULL_FIELD = re.compile(r'"([A-Za-z_]\w*)"\s*:\s*null')
+_JSON_NUM_FIELD  = re.compile(r'"([A-Za-z_]\w*)"\s*:\s*(-?\d+(?:\.\d+)?)')
+
+
+def _salvage_json_fields(text: str):
+    """Extract every complete key/value pair from a broken/truncated JSON object."""
+    out: dict = {}
+    for m in _JSON_STR_FIELD.finditer(text):
+        v = m.group(2).replace("\\n", "\n").replace('\\"', '"').replace("\\\\", "\\")
+        out.setdefault(m.group(1), v)
+    for m in _JSON_NULL_FIELD.finditer(text):
+        out.setdefault(m.group(1), None)
+    for m in _JSON_NUM_FIELD.finditer(text):
+        if m.group(1) not in out:
+            num = m.group(2)
+            out[m.group(1)] = int(num) if num.lstrip("-").isdigit() else float(num)
+    return out or None
 
 
 def _repair_json(s: str) -> str:
@@ -523,13 +551,61 @@ def _repair_json(s: str) -> str:
 
 _EMAIL_RE = re.compile(r"[\w._%+-]+@[\w.-]+\.[A-Za-z]{2,}")
 _PHONE_RE = re.compile(r"(\+?\d[\d\s().-]{7,}\d)")
-_LINKEDIN_RE = re.compile(r"https?://(?:www\.)?linkedin\.com/in/[A-Za-z0-9\-_/]+", re.I)
-_GITHUB_RE = re.compile(r"https?://(?:www\.)?github\.com/[A-Za-z0-9\-_/]+", re.I)
+# Accept links with OR without the https:// scheme (resumes often write the
+# bare domain, e.g. "linkedin.com/in/jane").
+_LINKEDIN_RE = re.compile(r"(?:https?://)?(?:www\.)?linkedin\.com/in/[A-Za-z0-9\-_/]+", re.I)
+_GITHUB_RE   = re.compile(r"(?:https?://)?(?:www\.)?github\.com/[A-Za-z0-9\-_/]+", re.I)
+
+# US state abbreviations + a few common country names, used to validate that a
+# "City, X" segment really is a location (and not e.g. "Python, SQL").
+_US_STATE_ABBR = {
+    "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA", "HI", "ID", "IL",
+    "IN", "IA", "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO", "MT",
+    "NE", "NV", "NH", "NJ", "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI",
+    "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY", "DC",
+}
+_COUNTRY_WORDS = {
+    "usa", "u.s.a", "u.s.", "us", "united states", "united states of america",
+    "india", "canada", "uk", "u.k.", "united kingdom", "england", "australia",
+    "germany", "france", "ireland", "singapore", "netherlands", "spain",
+}
+_LOC_SEG_RE = re.compile(
+    r"^([A-Za-z][A-Za-z.\-'' ]{1,28}),\s*([A-Za-z.\-'' ]{2,28})"
+    r"(?:,\s*([A-Za-z.\-'' ]{2,28}))?$"
+)
+
+
+def _norm_link(url: str) -> str:
+    url = (url or "").strip().rstrip("/")
+    if url and not re.match(r"^https?://", url, re.I):
+        url = "https://" + url
+    return url
+
+
+def _extract_location(resume_text: str):
+    """Best-effort (city, state, country) from the first lines of a resume.
+    Validates the second/third token against US states / known countries so we
+    don't mistake 'Python, SQL' for a location. Returns (city, state, country)."""
+    for line in resume_text.splitlines()[:12]:
+        for seg in re.split(r"[|•·]", line):
+            m = _LOC_SEG_RE.match(seg.strip())
+            if not m:
+                continue
+            city = m.group(1).strip()
+            t2 = m.group(2).strip()
+            t3 = (m.group(3) or "").strip()
+            if t2.upper() in _US_STATE_ABBR:
+                return city, t2, (t3 or "United States")
+            if t2.lower() in _COUNTRY_WORDS:
+                return city, None, t2
+            if t3 and t3.lower() in _COUNTRY_WORDS:
+                return city, t2, t3
+    return None, None, None
 
 
 def _regex_extract_resume(resume_text: str) -> dict:
     """Regex fallback when the LLM returns unparseable JSON.
-    Pulls just the contact basics from the raw resume text."""
+    Pulls contact basics + location + links from the raw resume text."""
     out = {
         "first_name": None, "middle_name": None, "last_name": None,
         "email": None, "phone": None,
@@ -547,10 +623,12 @@ def _regex_extract_resume(resume_text: str) -> dict:
         out["phone"] = m.group(0).strip()
     m = _LINKEDIN_RE.search(resume_text)
     if m:
-        out["linkedin_url"] = m.group(0).rstrip("/")
+        out["linkedin_url"] = _norm_link(m.group(0))
     m = _GITHUB_RE.search(resume_text)
     if m:
-        out["github_url"] = m.group(0).rstrip("/")
+        out["github_url"] = _norm_link(m.group(0))
+    city, state, country = _extract_location(resume_text)
+    out["city"], out["state"], out["country"] = city, state, country
     # Best-guess name: first non-empty line of the resume that doesn't contain
     # an email or "@" and is short.
     for line in resume_text.splitlines():
