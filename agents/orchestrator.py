@@ -85,6 +85,7 @@ class Orchestrator:
         log.info("=" * 64)
         log.info(" Pipeline start  -  tailoring factory mode")
         log.info("=" * 64)
+        log.info("Step 1/3 — reading your profile and resume…")
 
         # ── Archive previous run before writing any new pending rows ──────────
         from agents.history import HistoryAgent
@@ -103,6 +104,7 @@ class Orchestrator:
         if profile is None:
             return 1
 
+        log.info("Step 2/3 — searching job boards for fresh, matching roles…")
         candidates = self._run_discovery(profile)
         if not candidates:
             log.info("no candidates after discovery - done")
@@ -224,6 +226,7 @@ class Orchestrator:
                     if target and counters["packaged"] < target:
                         reached.clear()               # let another worker fill it
 
+        log.info(f"Step 3/3 — writing a tailored resume + cover letter for {total} job(s)…")
         log.info(f"tailoring {total} job(s) with {workers} parallel worker(s)")
         if workers == 1:
             for i, app in enumerate(process_list, 1):

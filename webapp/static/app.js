@@ -743,20 +743,26 @@ async function uploadResume(file) {
 
 async function parseResumeAndFill(overwrite) {
   const statusEls = [$("#parse-status"), $("#home-parse-status"), $("#search-parse-status")];
-  statusEls.forEach(el => { if (el) el.textContent = "Reading resume with AI…"; });
+  const setStatus = (txt, color) => statusEls.forEach(el => {
+    if (el) { el.textContent = txt; el.style.color = color || ""; }
+  });
+  setStatus("🔍 Reading your resume with AI and filling your profile… (a few seconds)", "var(--accent)");
+  toast("🔍 Extracting details from your resume…", "");
   const res = await api.post("/api/profile/parse-resume", { overwrite });
   if (!res.ok) {
-    statusEls.forEach(el => { if (el) el.textContent = ""; });
+    setStatus("");
     const err = res.error || "";
-    const msg = (err.includes("No usable LLM") || err.includes("No module"))
-      ? "No API key set — go to Settings tab and add your Gemini or Claude key."
-      : "Parse failed: " + err;
+    const msg = (err.includes("No usable LLM") || err.includes("No module") || err.includes("No API key"))
+      ? "No API key set — open the Settings tab and add your Gemini or Claude key, then try again."
+      : "Couldn't read the resume: " + err;
+    setStatus("✗ " + msg, "var(--red)");
     toast(msg, "err");
     return;
   }
-  const done = `✓ Filled ${res.written?.length || 0} fields`;
-  statusEls.forEach(el => { if (el) el.textContent = done; });
-  toast(`Profile auto-filled (${res.written?.length || 0} fields) — check the Profile tab`, "ok");
+  const n = res.written?.length || 0;
+  const fields = (res.written || []).map(f => f.split(".").pop().replace(/_/g, " ")).slice(0, 6).join(", ");
+  setStatus(`✓ Extraction complete — filled ${n} field${n === 1 ? "" : "s"}${fields ? " (" + fields + (n > 6 ? "…" : "") + ")" : ""}. Review them in the Profile tab.`, "var(--green)");
+  toast(`✓ Resume read — auto-filled ${n} profile field${n === 1 ? "" : "s"}`, "ok");
   await loadProfile();
 }
 
@@ -1350,6 +1356,21 @@ function appendLog(ev) {
     line += `<span class="log-agent">[done]</span><span class="log-stage">${escapeHtml(JSON.stringify(ev.summary || ev))}</span>`;
   } else if (ev.type === "error") {
     line += `<span class="log-agent">[error]</span><span class="log-err">${escapeHtml(ev.error || ev.msg || '')}</span>`;
+  } else if (ev.type === "job") {
+    // Per-job pipeline events carry title/company/score but no msg — build one.
+    const where = `${ev.title || ""}${ev.company ? " @ " + ev.company : ""}`.trim();
+    let msg, cls;
+    if (ev.stage === "packaged") {
+      msg = `✓ Prepared application — ${where}` + (ev.ats_score ? ` (ATS ${ev.ats_score}/100)` : "");
+      cls = "log-info";
+    } else if (ev.stage === "failed") {
+      msg = `✗ Skipped — ${where}`;
+      cls = "log-warn";
+    } else {
+      msg = `${ev.stage || "job"} — ${where}`;
+      cls = "log-info";
+    }
+    line += `<span class="log-agent">[job]</span><span class="${cls}">${escapeHtml(msg)}</span>`;
   } else {
     const cls = ev.level === "WARNING" ? "log-warn" : ev.level === "ERROR" ? "log-err" : "log-info";
     line += `<span class="log-agent">[${ev.agent || 'log'}]</span><span class="${cls}">${escapeHtml(ev.msg || '')}</span>`;
