@@ -171,13 +171,14 @@ RESUME LENGTH — CRITICAL:
    If trimming is needed, cut the weakest/least-relevant bullets — never add filler.
    Do NOT invent new bullets. Keep section count and order close to the original.
 
-HEADER FORMAT — output these exact 4 lines at the top of BOTH the resume and the cover letter:
+HEADER FORMAT — output these exact 3 lines at the top of BOTH the resume and the cover letter:
 <Candidate full name in ALL CAPS>
 <tagline / headline from the original resume>
 <City, State • email • phone>
-Portfolio • GitHub • LinkedIn
 
-(The header items Portfolio, GitHub, LinkedIn are plain words separated by " • " — no URLs, no hyperlinks.)
+Do NOT add a LinkedIn / GitHub / Portfolio line and do NOT put any URLs in the
+header — the app automatically appends the candidate's REAL links (only the ones
+they actually have) as clickable links.
 
 COVER LETTER — 1 page max. EXACT structure required:
 Line 0:  Dear Hiring Manager,
@@ -188,7 +189,7 @@ Paragraph 2:  Why this company and this specific role. Reference details from th
 (blank line)
 Paragraph 3:  2–3 specific projects from my resume that map directly to the JD requirements (e.g. VendorVault, Rippl Predict, thesis). Name them explicitly.
 (blank line)
-Paragraph 4 (close):  Availability, invitation to discuss, thanks. End with a sign-off on its own line: "Sincerely," then a blank line then the candidate's full name.
+Paragraph 4 (close):  A brief note on availability and an invitation to discuss. Do NOT write a thank-you line, sign-off, or the candidate's name — the app appends the closing ("Thank you," + name + portfolio link) automatically.
 
 CRITICAL: Every paragraph boundary in the cover letter MUST be a blank line (\\n\\n) in the JSON string so the PDF renderer produces separate paragraphs. Do NOT run the entire letter as one block.
 

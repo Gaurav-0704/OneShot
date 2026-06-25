@@ -366,11 +366,26 @@ class TailorAgent(Agent):
         cover_text  = best["cover"]
         resume_pdf  = app.folder / "resume.pdf"
         cover_pdf   = app.folder / "cover_letter.pdf"
+
+        # Conditional clickable header links — only the ones actually in the
+        # profile are shown (empties are filtered by the PDF generator).
+        p = self.profile
+        links = {
+            "LinkedIn":  getattr(p, "linkedin_url", "") or "",
+            "GitHub":    getattr(p, "github_url", "") or "",
+            "Portfolio": getattr(p, "website_url", "") or "",
+        }
+        full_name     = getattr(p, "full_name", "") or ""
+        portfolio_url = getattr(p, "website_url", "") or ""
+
         try:
-            generate_resume_pdf(resume_text, str(resume_pdf))
+            generate_resume_pdf(resume_text, str(resume_pdf), links=links)
             (app.folder / "resume.txt").write_text(resume_text, encoding="utf-8")
             if cover_text:
-                generate_cover_letter_pdf(cover_text, str(cover_pdf))
+                generate_cover_letter_pdf(
+                    cover_text, str(cover_pdf),
+                    links=links, name=full_name, portfolio_url=portfolio_url,
+                )
                 (app.folder / "cover_letter.txt").write_text(cover_text, encoding="utf-8")
         except Exception as e:
             self.warn(f"PDF render failed: {e}")
