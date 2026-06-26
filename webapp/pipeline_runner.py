@@ -194,7 +194,6 @@ class PipelineRunner:
                 headless=bool(options.get("headless", False)),
                 should_stop=self.should_stop,
                 use_cache=bool(options.get("use_cache", False)),
-                on_event=self._emit,
             )
             rc = orch.run()
 

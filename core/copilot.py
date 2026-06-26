@@ -25,6 +25,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from pathlib import Path
 
 from core.qa_memory import QAStore, _norm
 
@@ -142,22 +143,6 @@ def build_profile_text(profile) -> str:
         "",
         f"Summary: {p.user_information_summary or p.summary}",
     ]
-
-    # Per-skill years (years_python, years_javascript, years_aws, ...) from
-    # questions.yaml — these are the most fabrication-prone facts, so surface
-    # them explicitly as source-of-truth for the copilot.
-    rq = getattr(p, "raw_questions", {}) or {}
-    skill_years = {
-        k.replace("years_", "").replace("_", " "): v
-        for k, v in rq.items()
-        if k.startswith("years_") and k != "years_of_experience" and v not in (None, "", 0)
-    }
-    if skill_years:
-        lines.append("")
-        lines.append("Verified skill experience (years):")
-        for skill, yrs in sorted(skill_years.items()):
-            lines.append(f"  - {skill}: {yrs}")
-
     resume = (getattr(p, "master_resume_text", "") or "").strip()
     if resume:
         lines.append(f"\n=== MASTER RESUME (source of truth) ===\n{resume[:4000]}")
@@ -207,7 +192,6 @@ def answer_question(
         or job.get("raw_description")
         or job.get("description", "")
     )
-    research_notes = job.get("research_notes", "") or ""
 
     # ── Cache lookup ──────────────────────────────────────────────────────────
     cached_rec, cache_sim, source = None, 0.0, "generated"
@@ -238,7 +222,6 @@ def answer_question(
                     question_type=q_type,
                     cached_answer=cached_answer_text,
                     instructions=instructions,
-                    research_notes=research_notes,
                 ),
                 max_tokens=500,
                 json_mode=True,

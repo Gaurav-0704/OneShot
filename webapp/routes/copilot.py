@@ -47,7 +47,7 @@ def _job_for_id(job_id: str) -> dict:
         with pcsv.open("r", newline="", encoding="utf-8") as f:
             for row in csv.DictReader(f):
                 if row.get("job_id") == job_id:
-                    job = {
+                    return {
                         "job_id":   job_id,
                         "title":    row.get("title", ""),
                         "company":  row.get("company", ""),
@@ -57,14 +57,6 @@ def _job_for_id(job_id: str) -> dict:
                         "folder":   row.get("folder", ""),
                         "description": "",
                     }
-                    # Phase 5: load full JD + research context saved at package
-                    # time so LIVE questions have the same context as prebake.
-                    ctx = _job_context(row.get("folder", ""))
-                    if ctx:
-                        job["description"] = ctx.get("description", "") or job["description"]
-                        job["enriched_description"] = ctx.get("enriched_description", "")
-                        job["research_notes"] = ctx.get("research_notes", "")
-                    return job
     # Fallback: last_discovered.json
     snap = _root() / "outputs" / "last_discovered.json"
     if snap.exists():
@@ -76,19 +68,6 @@ def _job_for_id(job_id: str) -> dict:
         except Exception:
             pass
     return {"job_id": job_id}
-
-
-def _job_context(folder: str) -> dict:
-    """Load job_context.json (full JD + research notes) from a job folder."""
-    if not folder:
-        return {}
-    p = Path(folder) / "job_context.json"
-    if not p.exists():
-        return {}
-    try:
-        return json.loads(p.read_text(encoding="utf-8"))
-    except Exception:
-        return {}
 
 
 def _copilot_data_for_job(job: dict) -> dict:

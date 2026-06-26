@@ -31,18 +31,7 @@ def start():
 
     options = request.get_json(silent=True) or {}
     run_id = runner.start(options)
-
-    # Auto-start continuous background discovery so fresh matches keep flowing
-    # without the user having to click Start on the background-search card.
-    bg = current_app.config.get("BG_DISCOVERY")
-    bg_status = None
-    if bg:
-        try:
-            bg_status = bg.start()
-        except Exception:
-            bg_status = None
-
-    return jsonify({"ok": True, "run_id": run_id, "background": bg_status})
+    return jsonify({"ok": True, "run_id": run_id})
 
 
 @bp.route("/state", methods=["GET"])
@@ -103,33 +92,6 @@ def stream():
     resp.headers["Connection"] = "keep-alive"
     resp.direct_passthrough = True
     return resp
-
-
-@bp.route("/discovery/start", methods=["POST"])
-def discovery_start():
-    """Start continuous background discovery (Phase 3)."""
-    bg = current_app.config.get("BG_DISCOVERY")
-    if not bg:
-        return jsonify({"ok": False, "error": "background discovery unavailable"}), 500
-    body = request.get_json(silent=True) or {}
-    interval = body.get("interval_min")
-    return jsonify({"ok": True, **bg.start(interval_min=interval)})
-
-
-@bp.route("/discovery/stop", methods=["POST"])
-def discovery_stop():
-    bg = current_app.config.get("BG_DISCOVERY")
-    if not bg:
-        return jsonify({"ok": False, "error": "background discovery unavailable"}), 500
-    return jsonify({"ok": True, **bg.stop()})
-
-
-@bp.route("/discovery/status", methods=["GET"])
-def discovery_status():
-    bg = current_app.config.get("BG_DISCOVERY")
-    if not bg:
-        return jsonify({"ok": False, "enabled": False, "running": False})
-    return jsonify({"ok": True, **bg.status()})
 
 
 @bp.route("/resume", methods=["POST"])

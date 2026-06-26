@@ -115,11 +115,7 @@ _STANDARD_BATTERY = [
     "What is your notice period? How soon can you start?",
     "Why are you interested in this {title} role?",
     "Why do you want to work at {company}?",
-    "Why are you a strong fit for this {title} position?",
-    "Walk me through your experience with {top_skill}.",
     "How many years of {top_skill} experience do you have?",
-    "What is your greatest professional strength?",
-    "What is an area you are working to improve?",
     "What are your salary expectations for this role?",
     "Are you available for a background check if required?",
     "Are you 18 years of age or older?",
@@ -150,7 +146,6 @@ def _prebake(app: JobApplication, profile, root: Path) -> list[dict]:
         "location": app.location,
         "description": app.enriched_description or app.raw_description,
         "enriched_description": app.enriched_description,
-        "research_notes": app.research_notes,
     }
 
     # Build the actual question list
@@ -261,23 +256,6 @@ class PackagerAgent(Agent):
                 )
             except Exception as e:
                 log.debug(f"   copilot_data.json write failed: {e}")
-
-        # ── Save full JD context so LIVE copilot questions have the same
-        #    context the prebake had (Phase 5). ────────────────────────────────
-        if app.folder:
-            try:
-                (app.folder / "job_context.json").write_text(json.dumps({
-                    "job_id":      app.job_id,
-                    "title":       app.title,
-                    "company":     app.company,
-                    "location":    app.location,
-                    "url":         app.url,
-                    "description": app.enriched_description or app.raw_description or "",
-                    "enriched_description": app.enriched_description or "",
-                    "research_notes":       app.research_notes or "",
-                }, indent=2), encoding="utf-8")
-            except Exception as e:
-                log.debug(f"   job_context.json write failed: {e}")
 
         self.info(
             f"packaged: {app.title} @ {app.company} "

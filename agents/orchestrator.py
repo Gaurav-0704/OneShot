@@ -22,6 +22,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -31,6 +32,7 @@ from agents.learner import LearnerAgent
 from agents.packager import PackagerAgent
 from agents.profile import ProfileAgent
 from agents.tailor import TailorAgent
+from core.tracker import daily_count
 from models import JobApplication, UserProfile
 
 log = logging.getLogger("orchestrator")
@@ -59,7 +61,6 @@ class Orchestrator:
         headless: bool = False,        # kept for API compat; no browser launched
         should_stop=None,
         use_cache: bool = False,
-        on_event=None,
     ):
         self.root          = root
         self.master_resume = master_resume
@@ -73,7 +74,6 @@ class Orchestrator:
         self.headless      = headless
         self.should_stop   = should_stop or (lambda: False)
         self.use_cache     = use_cache
-        self.on_event      = on_event or (lambda **kw: None)
 
         self.applied_csv = root / "outputs" / "applied_jobs.csv"
         self.failed_csv  = root / "outputs" / "failed_jobs.csv"
@@ -83,9 +83,8 @@ class Orchestrator:
 
     def run(self) -> int:
         log.info("=" * 64)
-        log.info(" Pipeline start  -  tailoring factory mode")
+        log.info(f" Pipeline start  -  tailoring factory mode")
         log.info("=" * 64)
-        log.info("Step 1/3 — reading your profile and resume…")
 
         # ── Archive previous run before writing any new pending rows ──────────
         from agents.history import HistoryAgent
@@ -104,7 +103,6 @@ class Orchestrator:
         if profile is None:
             return 1
 
-        log.info("Step 2/3 — searching job boards for fresh, matching roles…")
         candidates = self._run_discovery(profile)
         if not candidates:
             log.info("no candidates after discovery - done")
@@ -148,108 +146,60 @@ class Orchestrator:
         humanizer      = HumanizerAgent(profile, root=self.root)
         packager       = PackagerAgent(profile, pending_csv=self.pending_csv, root=self.root)
 
-        # run_limit now means "stop once this many are successfully SAVED to
-        # pending_review" — failures must NOT consume the quota. We still bound
-        # the number of candidates we ATTEMPT with a safety cap so a run can't
-        # loop forever when most jobs fail.
-        target = self.run_limit if (self.run_limit and self.run_limit > 0) else None
-        if target:
-            attempt_cap = min(len(candidates), max(target * 3, target + 10))
-        else:
-            attempt_cap = len(candidates)
-        if tailor_top_n > 0:                      # explicit cost cap on attempts
-            attempt_cap = min(attempt_cap, tailor_top_n)
-        process_list = candidates[:attempt_cap]
-        n_skipped = len(candidates) - len(process_list)
+        n_packaged    = 0
+        n_failed      = 0
+        n_skipped     = 0   # candidates beyond TAILOR_TOP_N
+        n_humanized   = 0
 
-        import threading
-        import time as _time
-        from concurrent.futures import ThreadPoolExecutor, as_completed
+        for i, app in enumerate(candidates, 1):
+            if self.should_stop():
+                log.info("stop requested - exiting per-job loop")
+                break
+            if self.run_limit and (n_packaged + n_failed) >= self.run_limit:
+                log.info(f"hit run limit {self.run_limit}. stopping.")
+                break
 
-        workers = max(1, int(os.environ.get("TAILOR_WORKERS", "4") or 4))
-        csv_lock = threading.Lock()
-        counters = {"packaged": 0, "failed": 0, "humanized": 0}
-        counters_lock = threading.Lock()
-        reached = threading.Event()               # set once `target` are packaged
-        total = len(process_list)
-        t0 = _time.time()
+            log.info(f"[{i}/{len(candidates)}] {app.title} @ {app.company}")
+            if app.fit_score:
+                log.info(f"   fit: {app.fit_score}/10  —  {app.fit_reason}")
 
-        def _process(idx: int, app: JobApplication) -> None:
-            # Skip cheaply once we've saved enough or a stop was requested.
-            if self.should_stop() or reached.is_set():
-                return
-            log.info(f"[{idx}/{total}] {app.title} @ {app.company}"
-                     + (f"  (fit {app.fit_score}/10)" if app.fit_score else ""))
+            # Cost cap: skip tailoring for jobs beyond TAILOR_TOP_N
+            if tailor_top_n > 0 and (n_packaged + n_failed) >= tailor_top_n:
+                log.info(f"   TAILOR_TOP_N reached — skipping (discovered only)")
+                n_skipped += 1
+                continue
+
             app.folder = self._make_folder(app)
 
+            # ── Tailor (research + write) ─────────────────────────────────────
             try:
                 tailor_agent.tailor(app)
             except Exception as e:
                 log.error(f"   tailor crashed: {e}")
-                with counters_lock: counters["failed"] += 1
-                self.on_event(type="job", stage="failed", title=app.title, company=app.company)
-                return
+                n_failed += 1
+                continue
 
             if app.tailored_resume_pdf is None:
-                log.warning(f"   no resume produced - skipping {app.title}")
-                with counters_lock: counters["failed"] += 1
-                self.on_event(type="job", stage="failed", title=app.title, company=app.company)
-                return
+                log.warning("   no resume produced - skipping")
+                n_failed += 1
+                continue
 
+            # ── Humanize (clean + smoke-test) ────────────────────────────────
             try:
                 humanizer.run(app, profile)
-                with counters_lock: counters["humanized"] += 1
+                n_humanized += 1
             except Exception as e:
                 log.warning(f"   humanizer failed (non-fatal): {e}")
 
-            # Atomically CLAIM a slot before packaging so parallel workers can
-            # never overshoot the target (this is what caused "asked 5, got 8").
-            # A failed package releases its slot so failures don't use up quota.
-            with counters_lock:
-                if target and counters["packaged"] >= target:
-                    reached.set()
-                    return                            # already have enough — discard this extra
-                counters["packaged"] += 1
-                if target and counters["packaged"] >= target:
-                    reached.set()
+            # ── Package (write to pending_review.csv) ─────────────────────────
             try:
-                with csv_lock:                       # serialize pending_review.csv writes
-                    packager.package(app)
-                self.on_event(type="job", stage="packaged", title=app.title,
-                              company=app.company, ats_score=app.ats_score,
-                              fit_score=app.fit_score)
+                packager.package(app)
+                n_packaged += 1
             except Exception as e:
                 log.error(f"   packager crashed: {e}")
-                with counters_lock:
-                    counters["packaged"] -= 1         # release the claimed slot
-                    counters["failed"] += 1
-                    if target and counters["packaged"] < target:
-                        reached.clear()               # let another worker fill it
+                n_failed += 1
 
-        log.info(f"Step 3/3 — writing a tailored resume + cover letter for {total} job(s)…")
-        log.info(f"tailoring {total} job(s) with {workers} parallel worker(s)")
-        if workers == 1:
-            for i, app in enumerate(process_list, 1):
-                if self.should_stop():
-                    log.info("stop requested - exiting per-job loop")
-                    break
-                if reached.is_set():
-                    log.info(f"reached {target} saved application(s) - stopping")
-                    break
-                _process(i, app)
-        else:
-            with ThreadPoolExecutor(max_workers=workers) as pool:
-                futures = {pool.submit(_process, i, app): i
-                           for i, app in enumerate(process_list, 1)}
-                for fut in as_completed(futures):
-                    fut.result()   # surface unexpected exceptions
-
-        elapsed = _time.time() - t0
-        per_job = elapsed / max(1, counters["packaged"] + counters["failed"])
-        log.info(f"per-job loop finished in {elapsed:.1f}s "
-                 f"({per_job:.1f}s/job avg, {workers} workers)")
-        self._final_report(counters["packaged"], counters["failed"],
-                           n_skipped, counters["humanized"])
+        self._final_report(n_packaged, n_failed, n_skipped, n_humanized)
 
         # ── LearnerAgent — runs after every pipeline pass ──────────────────────
         try:
@@ -307,9 +257,6 @@ class Orchestrator:
             limit=self.run_limit,
         )
         candidates = agent.discover()
-
-        if agent.new_count is not None:
-            log.info(f"{agent.new_count} new job(s) since last run")
 
         # Persist a full snapshot (above + below threshold) for the Discovered tab.
         try:

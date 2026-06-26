@@ -86,21 +86,12 @@ function switchTab(name) {
 
   // Per-tab refresh hooks
   if (tabName === "home")      loadHome();
-  if (tabName === "apply")     { loadPipeline(); loadApplications("pending"); }
+  if (tabName === "apply")     loadApplications("pending");
   if (tabName === "documents") loadDocuments();
   if (tabName === "profile")   { loadProfile(); renderValidity(); loadShowcaseStatus(); }
   if (tabName === "settings")  { loadEnv(); bindSettingsHandlers(); loadHealth(); loadProviderToggles(); }
-  if (tabName === "search" && subName === "search") { loadStatus(); loadInsights(); refreshResumeStatus(); }
-  document.body.classList.remove("nav-open");   // close the mobile menu after navigating
+  if (tabName === "search" && subName === "search") { loadStatus(); loadInsights(); }
 }
-
-// Mobile hamburger: toggle the slide-in sidebar + overlay
-(function bindMobileNav() {
-  const btn = document.getElementById("mobile-menu-btn");
-  const overlay = document.getElementById("mobile-overlay");
-  if (btn) btn.addEventListener("click", () => document.body.classList.toggle("nav-open"));
-  if (overlay) overlay.addEventListener("click", () => document.body.classList.remove("nav-open"));
-})();
 
 // Settings sub-tab (stab) switcher
 document.addEventListener("click", e => {
@@ -312,17 +303,12 @@ async function loadSettingsErrors() {
 
 // ── API helpers ──────────────────────────────────────────────────────────
 
-// If the session expired (password gate enabled), bounce to the login page.
-function _checkAuth(r) {
-  if (r.status === 401) { window.location.href = "/login"; throw new Error("unauthorized"); }
-  return r;
-}
 const api = {
   // Cache-bust GETs so the browser doesn't serve stale JSON after a PUT
   get:  (u) => fetch(u + (u.includes("?") ? "&" : "?") + "_t=" + Date.now(),
-                     { cache: "no-store" }).then(_checkAuth).then(r => r.json()),
-  put:  (u, body) => fetch(u, { method: "PUT", headers: {"Content-Type":"application/json"}, body: JSON.stringify(body) }).then(_checkAuth).then(r => r.json()),
-  post: (u, body) => fetch(u, { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(body || {}) }).then(_checkAuth).then(r => r.json()),
+                     { cache: "no-store" }).then(r => r.json()),
+  put:  (u, body) => fetch(u, { method: "PUT", headers: {"Content-Type":"application/json"}, body: JSON.stringify(body) }).then(r => r.json()),
+  post: (u, body) => fetch(u, { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(body || {}) }).then(r => r.json()),
 };
 
 function toast(msg, kind="", durationMs=60000) {
@@ -345,29 +331,6 @@ function toast(msg, kind="", durationMs=60000) {
   toast._t = setTimeout(() => { el.hidden = true; }, durationMs);
 }
 
-// ── Count cache: repaint last-known values instantly so a refresh never
-//    flashes misleading zeros while the async fetches are in flight. ────────
-const _COUNT_IDS = [
-  "stat-applied-today", "stat-applied-life", "stat-pending-life", "stat-failed-life",
-  "count-applied", "count-pending", "count-applied-sub", "count-failed",
-  "count-discovered", "pipe-count-discovered", "pipe-count-tailored",
-  "pipe-count-applied", "pipe-count-interview",
-];
-function cacheCounts() {
-  const m = {};
-  _COUNT_IDS.forEach(id => { const el = $("#" + id); if (el) m[id] = el.textContent; });
-  try { localStorage.setItem("oneshot_counts", JSON.stringify(m)); } catch (_) {}
-}
-function restoreCounts() {
-  try {
-    const m = JSON.parse(localStorage.getItem("oneshot_counts") || "{}");
-    Object.entries(m).forEach(([id, v]) => {
-      const el = $("#" + id);
-      if (el && v != null && v !== "" && v !== "—") el.textContent = v;
-    });
-  } catch (_) {}
-}
-
 // ── Dashboard / status ───────────────────────────────────────────────────
 
 async function loadStatus() {
@@ -388,7 +351,6 @@ async function loadStatus() {
     // Live badge visibility in sidebar
     const liveBadge = $("#nav-badge-live");
     if (liveBadge) liveBadge.hidden = !s.runner_running;
-    cacheCounts();
   } catch (e) { console.error(e); }
 }
 
@@ -427,11 +389,12 @@ async function loadEnv() {
     // Settings form (only if it exists — settings tab may be hidden)
     const form = $("#settings-form");
     if (form) {
-      // Provider buttons — single active provider
+      // Provider buttons
       $$(".provider-btn").forEach(b => b.classList.toggle("active", b.dataset.provider === e.llm_provider));
-      const apl = $("#active-provider-label");
-      if (apl) apl.textContent = e.llm_provider || "claude";
 
+      // Per-tier provider routing (blank = use default above)
+      setVal(form, "LLM_PROVIDER_SMART", e.llm_provider_smart || "");
+      setVal(form, "LLM_PROVIDER_CHEAP", e.llm_provider_cheap || "");
       setVal(form, "CLAUDE_BUDGET_USD",  e.claude_budget_usd  || "");
       setVal(form, "ATS_TARGET_MIN",     e.ats_target_min   || 80);
       setVal(form, "ATS_MAX_REWRITES",   e.ats_max_rewrites || 1);
@@ -489,6 +452,10 @@ async function saveSettings() {
     const v = (form.elements[k]?.value ?? "").toString();
     if (v) set[k] = v;
   });
+  // Per-tier providers: always send (empty string clears the override)
+  ["LLM_PROVIDER_SMART", "LLM_PROVIDER_CHEAP"].forEach(k => {
+    set[k] = (form.elements[k]?.value ?? "").toString();
+  });
   // Budget: always send so user can clear it by emptying the field
   set["CLAUDE_BUDGET_USD"] = (form.elements["CLAUDE_BUDGET_USD"]?.value ?? "").toString();
   // ATS rewrite tuning - always send so user can change them
@@ -505,26 +472,11 @@ async function saveSettings() {
 }
 
 async function clearKey(name) {
-  if (!confirm(`Remove ${name}? The engine won't be able to use this provider until you add it again.`)) return;
-  const res = await fetch("/api/env", {
-    method: "DELETE", headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({ unset: [name] }),
-  }).then(r => r.json()).catch(() => ({ ok: false }));
-  if (res.ok) {
-    const inp = document.querySelector(`#settings-form [name="${name}"]`);
-    if (inp) inp.value = "";
-    toast(`${name} removed`, "ok");
-    loadEnv();
-  } else {
-    toast(`Remove failed`, "err");
-  }
+  if (!confirm(`Clear ${name}?`)) return;
+  await api.put("/api/env", { clear: [name] });
+  toast(`${name} cleared`, "ok");
+  loadEnv();
 }
-
-// Remove-key buttons beside each API-key field
-document.addEventListener("click", e => {
-  const btn = e.target.closest(".btn-remove-key");
-  if (btn) clearKey(btn.dataset.key);
-});
 
 // Bind once, after DOM is ready (these elements only exist when settings tab loads)
 function bindSettingsHandlers() {
@@ -678,9 +630,6 @@ function _setDzState(hasResume, filename, sizeKb) {
   const hName  = $("#home-dz-name");
   const hMeta  = $("#home-dz-meta");
   const hDz    = $("#home-dropzone");
-  const sName  = $("#search-dz-name");
-  const sMeta  = $("#search-dz-meta");
-  const sDz    = $("#search-dropzone");
 
   if (hasResume) {
     const label = filename ? `✓ ${filename}` : "✓ Resume on file";
@@ -691,9 +640,6 @@ function _setDzState(hasResume, filename, sizeKb) {
     if (hName) hName.textContent = label;
     if (hMeta) hMeta.textContent = hint;
     if (hDz)  { hDz.style.borderColor = "var(--green,#4caf50)"; hDz.style.borderStyle = "solid"; }
-    if (sName) sName.textContent = label;
-    if (sMeta) sMeta.textContent = hint;
-    if (sDz)   sDz.classList.add("ok-have");
   } else {
     if (name) name.textContent = "Drop PDF / DOCX here or click to browse";
     if (meta) meta.textContent = "PDF recommended · max 10 MB";
@@ -701,9 +647,6 @@ function _setDzState(hasResume, filename, sizeKb) {
     if (hName) hName.textContent = "Upload your resume to get started";
     if (hMeta) hMeta.textContent = "PDF / DOCX · click or drag here";
     if (hDz)  { hDz.style.borderColor = ""; hDz.style.borderStyle = ""; }
-    if (sName) sName.textContent = "Drop your resume here or click to browse — auto-fills your profile";
-    if (sMeta) sMeta.textContent = "PDF / DOCX / DOC / TXT · max 10 MB";
-    if (sDz)   sDz.classList.remove("ok-have");
   }
 }
 
@@ -719,50 +662,40 @@ async function uploadResume(file) {
   if (!file) return;
   // Show filename immediately — before the upload completes
   _setDzState(false);
-  const nameEl = $("#dz-name"); const hNameEl = $("#home-dz-name"); const sNameEl = $("#search-dz-name");
-  const metaEl = $("#dz-meta"); const hMetaEl = $("#home-dz-meta"); const sMetaEl = $("#search-dz-meta");
+  const nameEl = $("#dz-name"); const hNameEl = $("#home-dz-name");
+  const metaEl = $("#dz-meta"); const hMetaEl = $("#home-dz-meta");
   const label = `⏳ Uploading ${file.name}…`;
-  const sizeTxt = `${(file.size/1024).toFixed(0)} KB`;
   if (nameEl)  nameEl.textContent  = label;
   if (hNameEl) hNameEl.textContent = label;
-  if (sNameEl) sNameEl.textContent = label;
-  if (metaEl)  metaEl.textContent  = sizeTxt;
-  if (hMetaEl) hMetaEl.textContent = sizeTxt;
-  if (sMetaEl) sMetaEl.textContent = sizeTxt;
+  if (metaEl)  metaEl.textContent  = `${(file.size/1024).toFixed(0)} KB`;
+  if (hMetaEl) hMetaEl.textContent = `${(file.size/1024).toFixed(0)} KB`;
 
   const fd = new FormData();
   fd.append("file", file);
   const res = await fetch("/api/profile/upload-resume", { method: "POST", body: fd }).then(r => r.json());
   if (!res.ok) { toast("Upload failed: " + (res.error || ""), "err"); return; }
 
-  // Show the user's ORIGINAL filename (not the saved master_resume.* name).
-  _setDzState(true, file.name, (res.size_bytes / 1024).toFixed(0));
+  _setDzState(true, res.saved_as, (res.size_bytes / 1024).toFixed(0));
   toast("Resume uploaded — auto-filling profile…", "ok");
   await parseResumeAndFill(false);
 }
 
 async function parseResumeAndFill(overwrite) {
-  const statusEls = [$("#parse-status"), $("#home-parse-status"), $("#search-parse-status")];
-  const setStatus = (txt, color) => statusEls.forEach(el => {
-    if (el) { el.textContent = txt; el.style.color = color || ""; }
-  });
-  setStatus("🔍 Reading your resume with AI and filling your profile… (a few seconds)", "var(--accent)");
-  toast("🔍 Extracting details from your resume…", "");
+  const statusEls = [$("#parse-status"), $("#home-parse-status")];
+  statusEls.forEach(el => { if (el) el.textContent = "Reading resume with AI…"; });
   const res = await api.post("/api/profile/parse-resume", { overwrite });
   if (!res.ok) {
-    setStatus("");
+    statusEls.forEach(el => { if (el) el.textContent = ""; });
     const err = res.error || "";
-    const msg = (err.includes("No usable LLM") || err.includes("No module") || err.includes("No API key"))
-      ? "No API key set — open the Settings tab and add your Gemini or Claude key, then try again."
-      : "Couldn't read the resume: " + err;
-    setStatus("✗ " + msg, "var(--red)");
+    const msg = (err.includes("No usable LLM") || err.includes("No module"))
+      ? "No API key set — go to Settings tab and add your Gemini or Claude key."
+      : "Parse failed: " + err;
     toast(msg, "err");
     return;
   }
-  const n = res.written?.length || 0;
-  const fields = (res.written || []).map(f => f.split(".").pop().replace(/_/g, " ")).slice(0, 6).join(", ");
-  setStatus(`✓ Extraction complete — filled ${n} field${n === 1 ? "" : "s"}${fields ? " (" + fields + (n > 6 ? "…" : "") + ")" : ""}. Review them in the Profile tab.`, "var(--green)");
-  toast(`✓ Resume read — auto-filled ${n} profile field${n === 1 ? "" : "s"}`, "ok");
+  const done = `✓ Filled ${res.written?.length || 0} fields`;
+  statusEls.forEach(el => { if (el) el.textContent = done; });
+  toast(`Profile auto-filled (${res.written?.length || 0} fields) — check the Profile tab`, "ok");
   await loadProfile();
 }
 
@@ -774,24 +707,14 @@ $("#btn-parse-resume-overwrite").addEventListener("click", () => {
 // Profile tab file input
 $("#resume-file").addEventListener("change", e => {
   const f = e.target.files[0];
-  if (f) { _setDzState(false); $("#dz-name").textContent = `${f.name} · ${(f.size/1024).toFixed(0)} KB`; uploadResume(f); }
-  else refreshResumeStatus();   // selection cleared → reset to real state
+  if (f) uploadResume(f);
 });
 
 // Home tab file input
 const homeFile = $("#home-resume-file");
 if (homeFile) homeFile.addEventListener("change", e => {
   const f = e.target.files[0];
-  if (f) { const hn = $("#home-dz-name"); if (hn) hn.textContent = `${f.name} · ${(f.size/1024).toFixed(0)} KB`; uploadResume(f); }
-  else refreshResumeStatus();
-});
-
-// Search-tab Profile Validation file input (same upload→auto-fill flow)
-const searchFile = $("#search-resume-file");
-if (searchFile) searchFile.addEventListener("change", e => {
-  const f = e.target.files[0];
-  if (f) { const sn = $("#search-dz-name"); if (sn) sn.textContent = `${f.name} · ${(f.size/1024).toFixed(0)} KB`; uploadResume(f); }
-  else refreshResumeStatus();
+  if (f) uploadResume(f);
 });
 
 // Drag-and-drop for profile + home dropzones
@@ -802,15 +725,6 @@ dz.addEventListener("drop", e => {
   const f = e.dataTransfer.files[0];
   if (f) uploadResume(f);
 });
-const searchDz = $("#search-dropzone");
-if (searchDz) {
-  ["dragenter","dragover"].forEach(ev => searchDz.addEventListener(ev, e => { e.preventDefault(); searchDz.classList.add("drag"); }));
-  ["dragleave","drop"].forEach(ev => searchDz.addEventListener(ev, e => { e.preventDefault(); searchDz.classList.remove("drag"); }));
-  searchDz.addEventListener("drop", e => {
-    const f = e.dataTransfer.files[0];
-    if (f) uploadResume(f);
-  });
-}
 const homeDz = $("#home-dropzone");
 if (homeDz) {
   ["dragenter","dragover"].forEach(ev => homeDz.addEventListener(ev, e => { e.preventDefault(); homeDz.style.borderColor = "var(--accent)"; }));
@@ -992,31 +906,6 @@ async function renderValidity() {
     runBtn.style.opacity = v.is_complete ? "1" : "0.5";
     runBtn.style.cursor = v.is_complete ? "" : "not-allowed";
   }
-  syncRunButtons();
-}
-
-// Keep every Start-Run button (top, card-head, bottom bars) in sync with the
-// primary #btn-run state (incomplete-profile disable + running disable).
-function syncRunButtons() {
-  const main = $("#btn-run");
-  if (!main) return;
-  $$(".run-mirror").forEach(b => {
-    b.disabled = main.disabled;
-    b.style.opacity = main.disabled ? "0.5" : "1";
-    b.style.cursor = main.disabled ? "not-allowed" : "";
-    b.title = main.title;
-  });
-}
-function setRunButtonsRunning(running) {
-  const main = $("#btn-run");
-  if (!main) return;
-  if (running) {
-    main.disabled = true;
-    syncRunButtons();
-  } else {
-    // Re-derive the correct enabled state (profile completeness) on finish.
-    renderValidity();
-  }
 }
 
 function jumpToField(fieldPath) {
@@ -1029,7 +918,7 @@ function jumpToField(fieldPath) {
     "personal.contact.linkedin":"sec-links",
     "personal.contact.github":  "sec-links",
     "personal.address.city":    "sec-address",
-    "personal.address.country": "sec-address",
+    "personal.address.country": "sec-identity",
     "questions.years_of_experience":  "sec-experience",
     "questions.linkedin_headline":     "sec-about",
     "questions.user_information_summary": "sec-about",
@@ -1093,9 +982,6 @@ async function loadPreferences() {
     const f = $("#search-form");
     setVal(f, "search_terms", (p.search_terms || []).join("\n"));
     setVal(f, "locations",    (p.locations || []).join("\n"));
-    setVal(f, "allowed_countries", (p.allowed_countries || []).join(", "));
-    setVal(f, "remote_scope", p.remote_scope || "country");
-    if (f.elements["fresh_only"]) f.elements["fresh_only"].checked = (p.fresh_only !== false);
     f.elements["remote"].checked = !!p.remote;
     f.elements["hybrid"].checked = !!p.hybrid;
     f.elements["onsite"].checked = !!p.onsite;
@@ -1124,28 +1010,6 @@ async function loadPreferences() {
   } catch (e) { console.error(e); }
 }
 
-// ── Pipeline summary widgets (Phase 8) ───────────────────────────────────────
-// The per-job result cards are rendered by loadApplications('pending') →
-// renderPendingTable. This just keeps the four top count widgets current.
-async function loadPipeline() {
-  const set = (id, n) => { const el = $("#" + id); if (el) el.textContent = n; };
-  try {
-    const [disc, pend, appl] = await Promise.all([
-      api.get("/api/applications/discovered"),
-      api.get("/api/applications/pending"),
-      api.get("/api/applications/applied"),
-    ]);
-    const discovered = (disc.rows || []).filter(r => r.above_threshold !== false).length;
-    set("pipe-count-discovered", discovered);
-    set("pipe-count-tailored", (pend.rows || []).length);
-    set("pipe-count-applied", (appl.rows || []).length);
-    set("pipe-count-interview", 0);   // no interview data source yet
-    cacheCounts();
-  } catch (e) {
-    console.error("loadPipeline failed", e);
-  }
-}
-
 function collectPreferences() {
   const f = $("#search-form");
   const csv = (n) => getVal(f, n).split(",").map(s => s.trim()).filter(Boolean);
@@ -1168,10 +1032,6 @@ function collectPreferences() {
   return {
     search_terms: lines("search_terms"),
     locations:    lines("locations"),
-    allowed_countries: csv("allowed_countries"),
-    allowed_regions:   [],
-    remote_scope: getVal(f, "remote_scope") || "country",
-    fresh_only: f.elements["fresh_only"] ? f.elements["fresh_only"].checked : true,
     remote: f.elements["remote"].checked,
     hybrid: f.elements["hybrid"].checked,
     onsite: f.elements["onsite"].checked,
@@ -1203,38 +1063,6 @@ $("#btn-save-search").addEventListener("click", async () => {
   await api.put("/api/preferences", collectPreferences());
   toast("Filters saved", "ok");
 });
-
-// ── Background discovery (Phase 3) ───────────────────────────────────────────
-function renderBgDiscovery(s) {
-  const el = $("#bg-discovery-status");
-  if (!el || !s) return;
-  if (s.enabled && s.running) {
-    const nxt = s.next_run_in_s != null ? ` · next pass in ${Math.ceil(s.next_run_in_s / 60)} min` : "";
-    const last = s.last_run_at ? ` · last: ${s.last_new_count ?? 0} new` : "";
-    el.innerHTML = `<span style="color:var(--green)">● On</span> — every ${s.interval_min} min${nxt}${last}`;
-  } else {
-    el.textContent = "Off — runs discovery on a timer so fresh matches appear on their own.";
-  }
-}
-async function refreshBgDiscovery() {
-  try { renderBgDiscovery(await api.get("/api/pipeline/discovery/status")); } catch (e) {}
-}
-{
-  const start = $("#btn-bg-start"), stop = $("#btn-bg-stop");
-  if (start) start.addEventListener("click", async () => {
-    await api.put("/api/preferences", collectPreferences());   // use current filters
-    const interval_min = Number(getVal2("#bg-interval-min") || 60);
-    renderBgDiscovery(await api.post("/api/pipeline/discovery/start", { interval_min }));
-    toast("Background search started", "ok");
-  });
-  if (stop) stop.addEventListener("click", async () => {
-    renderBgDiscovery(await api.post("/api/pipeline/discovery/stop", {}));
-    toast("Background search stopped", "ok");
-  });
-  setInterval(refreshBgDiscovery, 20000);
-  refreshBgDiscovery();
-}
-function getVal2(sel) { const el = $(sel); return el ? el.value : ""; }
 
 // Auto-suggest search terms from the master resume (one cheap LLM call).
 // Pre-fills the textarea + experience-level dropdown so the user starts
@@ -1302,9 +1130,6 @@ $("#btn-run").addEventListener("click", async () => {
   }
   if (json.already_running) toast("Pipeline already running", "");
   else toast(`Pipeline started — run ${json.run_id}`, "ok");
-  // The run also auto-starts continuous background search — reflect it.
-  if (json.background) renderBgDiscovery(json.background);
-  else refreshBgDiscovery();
   switchTab("live");
   startEventStream();
 });
@@ -1325,16 +1150,14 @@ function startEventStream() {
       if (ev.type === "done" || ev.type === "end" || ev.type === "error") {
         setRunnerDot(ev.status || (ev.type === "error" ? "error" : "done"), false);
         setStopButtonVisible(false);
-        setRunButtonsRunning(false);
         loadStatus();
         // Auto-load related tabs after a run finishes
-        loadDiscovered(); loadDocuments(); loadPipeline();
+        loadDiscovered(); loadDocuments();
         loadApplications("applied"); loadApplications("pending");
         loadErrors();
       } else {
         setRunnerDot("running", true);
         setStopButtonVisible(true);
-        setRunButtonsRunning(true);
         $("#nav-badge-live").hidden = false;
       }
     } catch {}
@@ -1356,21 +1179,6 @@ function appendLog(ev) {
     line += `<span class="log-agent">[done]</span><span class="log-stage">${escapeHtml(JSON.stringify(ev.summary || ev))}</span>`;
   } else if (ev.type === "error") {
     line += `<span class="log-agent">[error]</span><span class="log-err">${escapeHtml(ev.error || ev.msg || '')}</span>`;
-  } else if (ev.type === "job") {
-    // Per-job pipeline events carry title/company/score but no msg — build one.
-    const where = `${ev.title || ""}${ev.company ? " @ " + ev.company : ""}`.trim();
-    let msg, cls;
-    if (ev.stage === "packaged") {
-      msg = `✓ Prepared application — ${where}` + (ev.ats_score ? ` (ATS ${ev.ats_score}/100)` : "");
-      cls = "log-info";
-    } else if (ev.stage === "failed") {
-      msg = `✗ Skipped — ${where}`;
-      cls = "log-warn";
-    } else {
-      msg = `${ev.stage || "job"} — ${where}`;
-      cls = "log-info";
-    }
-    line += `<span class="log-agent">[job]</span><span class="${cls}">${escapeHtml(msg)}</span>`;
   } else {
     const cls = ev.level === "WARNING" ? "log-warn" : ev.level === "ERROR" ? "log-err" : "log-info";
     line += `<span class="log-agent">[${ev.agent || 'log'}]</span><span class="${cls}">${escapeHtml(ev.msg || '')}</span>`;
@@ -1680,7 +1488,7 @@ async function loadDiscovered() {
   </div>`;
   target.innerHTML = summary + `<table class="t">
     <thead><tr>
-      <th>Match</th><th>Posted</th><th>Site</th><th>Company</th><th>Title</th>
+      <th>Match</th><th>Site</th><th>Company</th><th>Title</th>
       <th>Location</th><th>Salary</th><th>Why</th><th></th>
     </tr></thead>
     <tbody>${data.rows.map(r => {
@@ -1696,7 +1504,6 @@ async function loadDiscovered() {
       return `
       <tr style="${above ? '' : 'opacity:.7'}">
         <td><span class="pill ${matchCls}">${pctStr}</span></td>
-        <td class="small">${freshnessChip(r.date_posted)}</td>
         <td><span class="pill acc">${escapeHtml(r.site || '')}</span></td>
         <td>${escapeHtml(r.company || '')}</td>
         <td>${escapeHtml(r.title || '')}</td>
@@ -1740,18 +1547,6 @@ function formatSalary(min, max) {
   if (!min) return "";
   const fmt = (n) => `$${Math.round(n/1000)}k`;
   return max && max !== min ? `${fmt(min)}–${fmt(max)}` : fmt(min);
-}
-
-// Freshness chip — the earlier you apply, the better. date_posted is date-only.
-function freshnessChip(dp) {
-  if (!dp) return "";
-  const s = String(dp).slice(0, 10);
-  const d = new Date(s + "T00:00:00");
-  if (isNaN(d)) return "";
-  const days = Math.floor((Date.now() - d.getTime()) / 86400000);
-  if (days <= 0) return `<span class="pill ok" title="Posted today — apply early!">🔥 Today</span>`;
-  if (days === 1) return `<span class="pill warn" title="Posted yesterday">1d ago</span>`;
-  return `<span class="muted small" title="Posted ${s}">${days}d ago</span>`;
 }
 
 // ── Showcase PDF ─────────────────────────────────────────────────────────────
@@ -1806,7 +1601,6 @@ async function loadShowcaseStatus() {
 // ── Boot ────────────────────────────────────────────────────────────────
 
 (function init() {
-  restoreCounts();        // paint last-known counts instantly (no zero flash)
   renderYNGroups();
   bindJumps();
 
@@ -2094,9 +1888,8 @@ async function loadProviderToggles() {
     const models  = { gemini: "gemini-2.5-flash", claude: "claude-haiku-4-5", openai: "gpt-4o-mini" };
     target.innerHTML = `
       <div style="margin-bottom:12px" class="muted small">
-        <b>Single-provider engine:</b> the whole pipeline runs on the one provider you pick in
-        Settings (no cross-provider fallback). These cards show which keys are set; switch the
-        active provider in the Settings tab.
+        <b>Fallback order:</b> Gemini first (free) → Claude → OpenAI.
+        When an enabled provider hits a rate limit, OneShot automatically switches to the next one mid-run — no manual action needed.
       </div>
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px">
         ${d.providers.map(p => `
@@ -2139,32 +1932,21 @@ function renderPendingTable(rows) {
     const folderPath   = r.folder_path   || r.folder       || "";
     const applyUrl     = r.apply_url     || r.url          || "";
     const jobId        = r.job_id        || `row${i}`;
-    // Build file URLs to open the tailored PDFs via /api/files/tailored/<slug>/<file>
-    const _base   = p => (p || "").replace(/\\/g, "/").replace(/\/+$/, "").split("/").pop();
-    const _parent = p => { const a = (p || "").replace(/\\/g, "/").replace(/\/+$/, "").split("/"); a.pop(); return a.pop() || ""; };
-    const slug = _base(folderPath) || _parent(resumePath) || _parent(coverPath);
-    const fileUrl = (path) => (slug && path)
-      ? `/api/files/tailored/${encodeURIComponent(slug)}/${encodeURIComponent(_base(path))}` : "";
-    const resumeUrl = fileUrl(resumePath);
-    const coverUrl  = fileUrl(coverPath);
     return `
     <div class="card" style="margin-bottom:12px" data-job-id="${escapeHtml(jobId)}">
       <div class="card-head" style="gap:12px;flex-wrap:wrap">
         <div style="flex:1;min-width:200px">
           <div style="font-size:15px;font-weight:700">${escapeHtml(r.title || "Untitled")}</div>
-          <div class="muted small" style="margin-top:3px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-            <span>${escapeHtml(r.company || "")}${r.location ? " · " + escapeHtml(r.location) : ""}</span>
-            ${r.site || r.applier ? `<span class="pill acc">${escapeHtml(r.site || r.applier || "")}</span>` : ""}
-            ${freshnessChip(r.date_posted)}
+          <div class="muted small" style="margin-top:3px">
+            ${escapeHtml(r.company || "")}
+            ${r.location ? " &nbsp;·&nbsp; " + escapeHtml(r.location) : ""}
+            ${r.site || r.applier ? `&nbsp;·&nbsp; <span class="pill acc">${escapeHtml(r.site || r.applier || "")}</span>` : ""}
           </div>
-          ${r.fit_reason ? `<div class="muted small" style="margin-top:5px;max-width:560px">💡 ${escapeHtml(String(r.fit_reason).slice(0,140))}</div>` : ""}
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;flex-shrink:0">
           ${applyUrl ? `<a class="btn tiny primary" href="${escapeHtml(applyUrl)}" target="_blank">↗ Open job</a>` : ""}
-          ${resumeUrl ? `<a class="btn tiny" href="${resumeUrl}" target="_blank">📄 Resume</a>` : ""}
-          ${coverUrl ? `<a class="btn tiny" href="${coverUrl}" target="_blank">✉️ Cover letter</a>` : ""}
           ${folderPath ? `<button class="btn tiny" data-act="open-folder" data-path="${escapeHtml(folderPath)}">📁 Open folder</button>` : ""}
-          <button class="btn tiny primary" data-act="toggle-copilot" data-job-id="${escapeHtml(jobId)}" title="Ready-made answers to application questions for this job">🤖 Copilot answers</button>
+          <button class="btn tiny" data-act="toggle-copilot" data-job-id="${escapeHtml(jobId)}">🤖 Copilot</button>
           <button class="btn tiny ok" data-act="mark" data-idx="${i}">✓ Mark applied</button>
           <button class="btn tiny ghost danger" data-act="dismiss" data-idx="${i}">✕ Dismiss</button>
         </div>
@@ -2552,24 +2334,3 @@ const _run2 = document.getElementById("btn-run2");
 if (_run2) _run2.addEventListener("click", () => document.getElementById("btn-run").click());
 const _save2 = document.getElementById("btn-save-search2");
 if (_save2) _save2.addEventListener("click", () => document.getElementById("btn-save-search").click());
-
-// Bottom Start-Run bar (Phase 5): copy its count into the form, then run.
-const _runBottom = document.getElementById("btn-run-bottom");
-if (_runBottom) _runBottom.addEventListener("click", () => {
-  const lb = document.getElementById("limit-bottom");
-  const f = document.getElementById("search-form");
-  if (lb && f && lb.value) f.elements["limit"].value = lb.value;
-  document.getElementById("btn-run").click();
-});
-const _saveBottom = document.getElementById("btn-save-search-bottom");
-if (_saveBottom) _saveBottom.addEventListener("click", () => document.getElementById("btn-save-search").click());
-// Keep the two count fields in sync both ways.
-const _limitTop = () => document.querySelector('#search-form [name="limit"]');
-const _limitBottom = document.getElementById("limit-bottom");
-if (_limitBottom) {
-  _limitBottom.addEventListener("input", () => { const t = _limitTop(); if (t) t.value = _limitBottom.value; });
-  const t = _limitTop();
-  if (t) t.addEventListener("input", () => { _limitBottom.value = t.value; });
-}
-// Ensure mirrors reflect the current run-button state on load.
-syncRunButtons();
