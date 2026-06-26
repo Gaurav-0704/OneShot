@@ -34,9 +34,10 @@ import os
 import random
 import sys
 import time
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
@@ -481,7 +482,7 @@ def run_scoring_benchmark(
     wasted_llm = llm_cm.fp
     reduction = (wasted_baseline - wasted_llm) / wasted_baseline if wasted_baseline else 0
     print()
-    print("  Wasted applications prevented by LLM scoring:")
+    print(f"  Wasted applications prevented by LLM scoring:")
     print(f"    Baseline accepts {wasted_baseline} irrelevant jobs "
           f"(all {n_neg} non-matches pass through)")
     print(f"    LLM rejects   {wasted_baseline - wasted_llm} of them  "

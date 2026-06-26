@@ -21,6 +21,7 @@ Re-running is safe: existing settings are preserved.
 from __future__ import annotations
 
 import argparse
+import os
 import platform
 import shutil
 import subprocess

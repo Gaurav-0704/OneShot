@@ -6,6 +6,7 @@ agents/ - the agent framework.
   TailorAgent       -> enriches each job (research) then writes tailored resume + cover
   PackagerAgent     -> assembles ready-to-apply packets, writes to pending_review.csv
   LearnerAgent      -> post-run analysis: ATS gaps, Q&A memory, insights
+  InterviewPrepAgent -> on-demand interview prep (optional, not in main loop)
 
 All agents inherit from agents.base.Agent.
 """

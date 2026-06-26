@@ -23,170 +23,6 @@ from llm.prompts import (
 log = logging.getLogger(__name__)
 
 
-# ── Positive location filter (Phase 1: geo-bounding) ──────────────────────────
-#
-# JobSpy's is_remote=True is NOT geo-bounded, so boards return worldwide remote
-# jobs. apply_rule_filters only does negative blacklisting. This adds a POSITIVE
-# "must be in an allowed country/region" check so a US search never leaks
-# China / Hong Kong / other foreign listings.
-
-# Canonical country -> set of aliases/codes that may appear in a location string.
-_COUNTRY_ALIASES: dict[str, set[str]] = {
-    "united states": {"united states", "usa", "u.s.a", "u.s.", " us", "us ",
-                       "united states of america", "america"},
-    "united kingdom": {"united kingdom", "uk", "u.k.", "england", "scotland",
-                       "wales", "northern ireland", "britain", "great britain"},
-    "canada": {"canada"},
-    "india": {"india"},
-    "china": {"china", "prc", "mainland china"},
-    "hong kong": {"hong kong", "hongkong"},
-    "singapore": {"singapore"},
-    "philippines": {"philippines"},
-    "germany": {"germany", "deutschland"},
-    "france": {"france"},
-    "ireland": {"ireland"},
-    "australia": {"australia"},
-    "netherlands": {"netherlands", "holland"},
-    "spain": {"spain"},
-    "poland": {"poland"},
-    "japan": {"japan"},
-    "south korea": {"south korea", "korea"},
-    "brazil": {"brazil", "brasil"},
-    "mexico": {"mexico"},
-    "pakistan": {"pakistan"},
-    "bangladesh": {"bangladesh"},
-    "indonesia": {"indonesia"},
-    "vietnam": {"vietnam", "viet nam"},
-    "malaysia": {"malaysia"},
-    "uae": {"united arab emirates", "uae", "dubai", "abu dhabi"},
-    "nigeria": {"nigeria"},
-    "south africa": {"south africa"},
-    "argentina": {"argentina"},
-    "colombia": {"colombia"},
-    "portugal": {"portugal"},
-    "italy": {"italy"},
-    "sweden": {"sweden"},
-    "switzerland": {"switzerland"},
-    "israel": {"israel"},
-    "turkey": {"turkey", "türkiye"},
-    "ukraine": {"ukraine"},
-    "romania": {"romania"},
-    "taiwan": {"taiwan"},
-    "thailand": {"thailand"},
-    "egypt": {"egypt"},
-    "kenya": {"kenya"},
-    "new zealand": {"new zealand"},
-}
-
-# US state codes + names → used to infer "united states" when no country token.
-_US_STATES = {
-    "al", "ak", "az", "ar", "ca", "co", "ct", "de", "fl", "ga", "hi", "id",
-    "il", "in", "ia", "ks", "ky", "la", "me", "md", "ma", "mi", "mn", "ms",
-    "mo", "mt", "ne", "nv", "nh", "nj", "nm", "ny", "nc", "nd", "oh", "ok",
-    "or", "pa", "ri", "sc", "sd", "tn", "tx", "ut", "vt", "va", "wa", "wv",
-    "wi", "wy", "dc",
-}
-_US_STATE_NAMES = {
-    "alabama", "alaska", "arizona", "arkansas", "california", "colorado",
-    "connecticut", "delaware", "florida", "georgia", "hawaii", "idaho",
-    "illinois", "indiana", "iowa", "kansas", "kentucky", "louisiana", "maine",
-    "maryland", "massachusetts", "michigan", "minnesota", "mississippi",
-    "missouri", "montana", "nebraska", "nevada", "new hampshire", "new jersey",
-    "new mexico", "new york", "north carolina", "north dakota", "ohio",
-    "oklahoma", "oregon", "pennsylvania", "rhode island", "south carolina",
-    "south dakota", "tennessee", "texas", "utah", "vermont", "virginia",
-    "washington", "west virginia", "wisconsin", "wyoming",
-}
-
-
-def _norm_country(name: str) -> str:
-    """Map a free-form country string to a canonical key (or the lowered input)."""
-    n = (name or "").strip().lower()
-    for canon, aliases in _COUNTRY_ALIASES.items():
-        if n == canon or n in {a.strip() for a in aliases}:
-            return canon
-    return n
-
-
-def _detect_country(location: str) -> str | None:
-    """Best-effort: return the canonical country named in a location string,
-    or None when it can't be determined (e.g. bare 'Remote')."""
-    loc = (location or "").strip().lower()
-    if not loc:
-        return None
-    # Pad with spaces so the " us"/"us " aliases match on boundaries.
-    padded = f" {loc} "
-    # Explicit country tokens win.
-    for canon, aliases in _COUNTRY_ALIASES.items():
-        for a in aliases:
-            a = a.strip()
-            if not a:
-                continue
-            # Word-ish boundary: alias surrounded by non-alphanumerics.
-            if re.search(rf"(?<![a-z]){re.escape(a)}(?![a-z])", padded):
-                return canon
-    # No country token — try US state inference from comma segments.
-    segs = [s.strip() for s in loc.replace("/", ",").split(",") if s.strip()]
-    for s in segs:
-        if s in _US_STATES or s in _US_STATE_NAMES:
-            return "united states"
-    return None
-
-
-def apply_location_filter(jobs: list[dict], prefs: dict[str, Any]) -> list[dict]:
-    """Keep only jobs located in an allowed country/region (or allowed remote).
-
-    prefs keys:
-      allowed_countries: ["United States", ...]   (empty/None = no geo filter)
-      allowed_regions:   ["California", "NY", ...] (optional; soft state filter)
-      remote_scope:      "country" (default) | "worldwide"
-
-    A job is kept when:
-      - allowed_countries is empty (filter disabled), OR
-      - remote_scope == "worldwide", OR
-      - its detected country is allowed, OR
-      - its country can't be determined (bare 'Remote'/blank) — kept to avoid
-        dropping legitimately-region-targeted remote roles.
-    A job is dropped when its detected country is clearly NOT allowed.
-    """
-    allowed_raw = prefs.get("allowed_countries") or []
-    allowed = {_norm_country(c) for c in allowed_raw if str(c).strip()}
-    remote_scope = str(prefs.get("remote_scope", "country")).strip().lower()
-
-    if not allowed or remote_scope == "worldwide":
-        return jobs
-
-    allowed_regions = {str(r).strip().lower() for r in (prefs.get("allowed_regions") or []) if str(r).strip()}
-
-    kept: list[dict] = []
-    dropped_foreign = 0
-    dropped_region = 0
-    for j in jobs:
-        country = _detect_country(j.get("location", ""))
-        if country is not None and country not in allowed:
-            dropped_foreign += 1
-            log.debug(f"location filter: drop {j.get('title','')[:40]} @ {j.get('location','')!r} (country={country})")
-            continue
-        # Optional region narrowing (only when a region is detectable and the
-        # job is not remote — never drop a remote role on region grounds).
-        if allowed_regions and not j.get("is_remote"):
-            loc = (j.get("location", "") or "").lower()
-            segs = {s.strip() for s in loc.replace("/", ",").split(",") if s.strip()}
-            region_tokens = segs & (_US_STATES | _US_STATE_NAMES)
-            if region_tokens and not (region_tokens & allowed_regions):
-                dropped_region += 1
-                continue
-        kept.append(j)
-
-    if dropped_foreign or dropped_region:
-        log.info(
-            f"location filter: {len(jobs)} -> {len(kept)} "
-            f"(dropped {dropped_foreign} foreign, {dropped_region} out-of-region; "
-            f"allowed={sorted(allowed)}, remote_scope={remote_scope})"
-        )
-    return kept
-
-
 def _matches_any(text, patterns) -> bool:
     """Defensive: coerce text to str. JobSpy can hand us NaN floats."""
     if not patterns:
@@ -439,35 +275,19 @@ def score_and_filter(
     min_score = int(fs.get("min_score", 6))
     log.info(f"fit scoring {len(jobs)} jobs in batches of {BATCH_SIZE}")
 
-    # Phase 4: score batches in parallel across a small pool (SCORE_WORKERS,
-    # default 3) so a large discovery doesn't block serially on the LLM.
-    import os
-    from concurrent.futures import ThreadPoolExecutor, as_completed
-    chunks = [jobs[i:i + BATCH_SIZE] for i in range(0, len(jobs), BATCH_SIZE)]
-    workers = max(1, int(os.environ.get("SCORE_WORKERS", "3") or 3))
-
-    def _score_chunk(idx_chunk):
-        idx, chunk = idx_chunk
+    # Build batches and score
+    by_id: dict[str, tuple[int, str]] = {}
+    for i in range(0, len(jobs), BATCH_SIZE):
+        chunk = jobs[i:i + BATCH_SIZE]
         try:
             results = _score_batch(chunk, resume_text)
-            log.info(f"  batch {idx + 1}/{len(chunks)}: scored {len(results)}/{len(chunk)}")
-            return results
+            log.info(f"  batch {i // BATCH_SIZE + 1}: scored {len(results)}/{len(chunk)}")
+            by_id.update(results)
         except Exception as e:
-            log.warning(f"  batch {idx + 1} failed: {e}; falling back to per-job")
-            out: dict[str, tuple[int, str]] = {}
+            log.warning(f"  batch {i // BATCH_SIZE + 1} failed: {e}; falling back to per-job")
             for j in chunk:
                 score, reason = fit_score(j, resume_text)
-                out[j["job_id"]] = (score, reason)
-            return out
-
-    by_id: dict[str, tuple[int, str]] = {}
-    if len(chunks) <= 1 or workers == 1:
-        for ic in enumerate(chunks):
-            by_id.update(_score_chunk(ic))
-    else:
-        with ThreadPoolExecutor(max_workers=min(workers, len(chunks))) as pool:
-            for fut in as_completed([pool.submit(_score_chunk, ic) for ic in enumerate(chunks)]):
-                by_id.update(fut.result())
+                by_id[j["job_id"]] = (score, reason)
 
     # Annotate every job with its score (even below-threshold ones)
     for j in jobs:

@@ -28,7 +28,7 @@ from typing import Any
 import yaml
 
 from reportlab.lib import colors
-from reportlab.lib.enums import TA_CENTER
+from reportlab.lib.enums import TA_CENTER, TA_LEFT
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
@@ -241,7 +241,7 @@ class ShowcaseBuilder:
             meta_bits.append(f"★ {repo['stars']}")
         title = repo["name"]
         if meta_bits:
-            title += "  •  " + "  •  ".join(meta_bits)
+            title += f"  •  " + "  •  ".join(meta_bits)
         parts.append(Paragraph(title, styles["repo_title"]))
 
         # Description — clean filler but never LLM-polish (no facts context needed)
