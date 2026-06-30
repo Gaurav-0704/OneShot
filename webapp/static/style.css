@@ -512,7 +512,8 @@ body {
 .field textarea { font-family: var(--mono); font-size: 12.5px; resize: vertical; min-height: 80px; }
 .field-hint  { font-size: 11.5px; color: var(--dim); }
 .field-error { font-size: 11.5px; color: var(--red); }
-.field input.invalid, .field select.invalid { border-color: var(--red); }
+.field input.invalid, .field select.invalid, .field textarea.invalid { border-color: var(--red); }
+.flash-focus { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 fieldset.field {
   border: 1.5px solid var(--glass-border); border-radius: var(--r-sm);
@@ -706,6 +707,13 @@ table.t .num { font-variant-numeric: tabular-nums; font-family: var(--mono); fon
 .req-dot.bad { background: var(--red); }
 .req-dot:hover { transform: scale(1.4); }
 
+/* Pipeline summary widgets (Phase 8) */
+.pipe-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+@media (max-width: 760px) { .pipe-stats { grid-template-columns: repeat(2, 1fr); } }
+.pipe-stat { background: var(--glass); border: 1px solid var(--glass-border); border-radius: var(--r-md); padding: 14px 16px; text-align: center; }
+.pipe-stat .ps-num { font-size: 26px; font-weight: 900; letter-spacing: -.04em; color: var(--accent); }
+.pipe-stat .ps-label { font-size: 12px; font-weight: 600; color: var(--muted); margin-top: 2px; text-transform: uppercase; letter-spacing: .03em; }
+
 /* ── Checkpoint stats ───────────────────────────────────── */
 .checkpoint-stats { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin-bottom: 16px; }
 .checkpoint-stat  { background: var(--glass); border: 1px solid var(--glass-border); border-radius: var(--r-sm); padding: 14px 16px; text-align: center; }
@@ -855,3 +863,95 @@ table.t .num { font-variant-numeric: tabular-nums; font-family: var(--mono); fon
 }
 .pill:hover { background: rgba(79,142,247,0.15); border-color: var(--accent); color: var(--text); }
 .pill.active { background: rgba(79,142,247,0.22); border-color: var(--accent); color: var(--accent); }
+
+/* ════════════════════════════════════════════════════════════════════════
+   MOBILE / RESPONSIVE
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* Mobile chrome is hidden on desktop */
+.mobile-topbar,
+.mobile-overlay,
+.mobile-menu-btn { display: none; }
+
+@media (max-width: 860px) {
+  /* IMPORTANT: .layout sets z-index:1 which would trap the sidebar's z-index
+     below the body-level overlay, so taps on the nav hit the overlay instead.
+     Drop the trapping context on mobile so the sidebar (z:250) beats the
+     overlay (z:150). The bg-canvas is z:0 fixed, so content still paints above it. */
+  .layout { z-index: auto; }
+
+  /* Top bar with hamburger */
+  .mobile-topbar {
+    display: flex; align-items: center; gap: 12px;
+    position: fixed; top: 0; left: 0; right: 0; height: 52px;
+    padding: 0 14px; z-index: 240;
+    background: var(--sb-bg);
+    backdrop-filter: blur(24px) saturate(1.6);
+    -webkit-backdrop-filter: blur(24px) saturate(1.6);
+    border-bottom: 1px solid var(--glass-border);
+  }
+  .mobile-menu-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 38px; height: 38px; font-size: 20px; line-height: 1;
+    background: var(--sb-item); color: var(--text);
+    border: 1px solid var(--glass-border); border-radius: var(--r-sm);
+    cursor: pointer;
+  }
+  .mobile-brand {
+    font-size: 15px; font-weight: 800; letter-spacing: -0.03em; color: var(--text);
+  }
+
+  /* Sidebar slides in from the left, ABOVE the overlay so its nav is tappable */
+  .sidebar {
+    transform: translateX(-100%);
+    transition: transform 0.22s ease;
+    width: 78vw; min-width: 0; max-width: 320px;
+    z-index: 250;
+  }
+  body.nav-open .sidebar { transform: translateX(0); }
+
+  /* Dim overlay behind the open sidebar */
+  body.nav-open .mobile-overlay {
+    display: block; position: fixed; inset: 0; z-index: 150;
+    background: rgba(0,0,0,0.5);
+  }
+
+  /* Main content: full width, clear the top bar */
+  .main { margin-left: 0; }
+  .tab { padding: 68px 16px 48px; }
+
+  /* Headers + actions stack and wrap */
+  .page-head { flex-direction: column; align-items: stretch; gap: 10px; }
+  .page-title { font-size: 22px; }
+  .page-actions { flex-wrap: wrap; }
+  .page-actions .btn { flex: 1 1 auto; }
+
+  /* Collapse multi-column grids to one column */
+  .grid-2, .grid-3, .field-grid { grid-template-columns: 1fr !important; }
+  .pipe-stats { grid-template-columns: repeat(2, 1fr); }
+  .field.span-2 { grid-column: auto; }
+
+  /* Sub-navs scroll horizontally instead of overflowing */
+  .subnav, .settings-subnav, .snav, .stab-bar {
+    overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch;
+  }
+  .subnav::-webkit-scrollbar, .settings-subnav::-webkit-scrollbar { display: none; }
+
+  /* Tables: let wide tables scroll inside their container */
+  #applied-table, #pending-table, #discovered-table, #failed-table,
+  #history-content, .stab, .sub, .card-body { overflow-x: auto; }
+  table.t { min-width: 540px; }
+
+  /* Provider picker + toggles stack */
+  .provider-row { flex-direction: column; }
+  .health-card .health-row { flex-direction: column; align-items: flex-start; gap: 8px; }
+
+  /* Pipeline result-card action buttons wrap full-width-ish */
+  .card-head { flex-wrap: wrap; }
+}
+
+@media (max-width: 480px) {
+  .pipe-stats { grid-template-columns: 1fr 1fr; }
+  .tab { padding: 64px 12px 40px; }
+  .modal, .dialog { width: 94vw; }
+}

@@ -1,37 +1,38 @@
 """
-Unified LLM client - Claude / OpenAI / Gemini.
+Unified LLM client — SINGLE provider.
 
-Two tiers:
+The whole engine runs on ONE provider, chosen in Settings via LLM_PROVIDER
+(claude | openai | gemini, default claude). Every call — resume writing,
+cover letters, fit scoring, parsing, copilot — uses that provider.
+
+Two tiers map to two MODELS of the SAME provider:
   complete()        smart model (resume + cover letter)
   complete_cheap()  cheap model (parsing, scoring, audits, Q&A)
 
-Auto-fallback: if the primary provider hits a rate-limit (429) the client
-automatically tries the next enabled provider with a real key.
+There is NO cross-provider auto-fallback. If the selected provider fails,
+the error is raised with a clear message so the user can fix the key or
+switch provider in Settings.
 
-Provider priority order (cheap): gemini → claude → openai
-Provider priority order (smart): claude → gemini → openai
+Model defaults per provider:
+  claude  → smart: claude-sonnet-4-6   cheap: claude-haiku-4-5-20251001
+  openai  → smart: gpt-4o              cheap: gpt-4o-mini
+  gemini  → smart: gemini-2.5-pro      cheap: gemini-2.5-flash
 
-Enable/disable per provider via .env:
-  PROVIDER_CLAUDE_ENABLED=true   (default true)
-  PROVIDER_GEMINI_ENABLED=true   (default true)
-  PROVIDER_OPENAI_ENABLED=true   (default true)
+Overrides (only honored when they belong to the selected provider):
+  LLM_MODEL        smart-tier model
+  LLM_MODEL_CHEAP  cheap-tier model
 """
 from __future__ import annotations
 
 import logging
 import os
-from typing import Literal, Optional
+from typing import Literal
 
 log = logging.getLogger("llm.client")
 
 Provider = Literal["claude", "openai", "gemini"]
 
 _KEY_VAR = {"claude": "ANTHROPIC_API_KEY", "openai": "OPENAI_API_KEY", "gemini": "GEMINI_API_KEY"}
-_ENABLED_VAR = {
-    "claude": "PROVIDER_CLAUDE_ENABLED",
-    "openai": "PROVIDER_OPENAI_ENABLED",
-    "gemini": "PROVIDER_GEMINI_ENABLED",
-}
 _FAMILY_PREFIX = {
     "claude": ("claude-",),
     "openai": ("gpt-", "o1-", "o3-", "o4-"),
@@ -40,29 +41,37 @@ _FAMILY_PREFIX = {
 _DEFAULT_SMART = {"claude": "claude-sonnet-4-6", "openai": "gpt-4o", "gemini": "gemini-2.5-pro"}
 _DEFAULT_CHEAP = {"claude": "claude-haiku-4-5-20251001", "openai": "gpt-4o-mini", "gemini": "gemini-2.5-flash"}
 
-# Priority fallback order per tier
-_CHEAP_ORDER = ["gemini", "claude", "openai"]
-_SMART_ORDER = ["claude", "gemini", "openai"]
+_DEFAULT_PROVIDER = "claude"
 
 
-# ── Provider enable/disable ───────────────────────────────────────────────────
+# ── Provider selection ────────────────────────────────────────────────────────
 
-def _provider_enabled(provider: str) -> bool:
-    """True unless explicitly disabled via PROVIDER_<X>_ENABLED=false."""
-    val = os.environ.get(_ENABLED_VAR.get(provider, ""), "true").strip().lower()
-    return val not in ("false", "0", "no", "off")
+def _selected_provider() -> str:
+    """The single provider the whole engine uses. Defaults to claude."""
+    p = (os.environ.get("LLM_PROVIDER", "") or "").strip().lower().strip("'").strip('"')
+    if p in _KEY_VAR:
+        return p
+    return _DEFAULT_PROVIDER
 
 
-def _resolve(env_var: str, default: str = "") -> str:
-    return os.environ.get(env_var, default).strip().strip("'").strip('"').lower()
+# Public alias kept for callers (e.g. agents/tailor.py) — tier is ignored now
+# since both tiers use the same selected provider.
+def _get_provider(tier: str = "smart") -> str:
+    return _selected_provider()
 
 
 def _get_api_key(provider: str) -> str:
     key = os.environ.get(_KEY_VAR[provider], "").strip().strip('"').strip("'")
     if not key:
-        raise RuntimeError(f"No API key for {provider}. Add it in the Settings tab.")
+        raise RuntimeError(
+            f"No API key for the selected provider '{provider}'. "
+            f"Add the {_KEY_VAR[provider]} in the Settings tab or switch provider."
+        )
     if key in {"sk-...", "sk-ant-...", "AIza..."} or key.endswith("..."):
-        raise RuntimeError(f"{provider} key looks like a placeholder ({key[:8]}...).")
+        raise RuntimeError(
+            f"The '{provider}' key looks like a placeholder ({key[:8]}...). "
+            f"Paste a real key in Settings or switch provider."
+        )
     return key
 
 
@@ -74,35 +83,12 @@ def _provider_has_real_key(provider: str) -> bool:
         return False
 
 
-def _provider_usable(provider: str) -> bool:
-    """Enabled AND has a real key."""
-    return _provider_enabled(provider) and _provider_has_real_key(provider)
-
-
-def _fallback_chain(tier: str) -> list[str]:
-    """Ordered list of usable providers for this tier, respecting enable flags."""
-    order = _CHEAP_ORDER if tier == "cheap" else _SMART_ORDER
-    return [p for p in order if _provider_usable(p)]
-
-
-def _get_provider(tier: str = "smart") -> str:
-    """Pick the primary provider for a tier, respecting explicit overrides."""
-    tier_var = "LLM_PROVIDER_SMART" if tier == "smart" else "LLM_PROVIDER_CHEAP"
-    explicit = _resolve(tier_var) or _resolve("LLM_PROVIDER")
-    if explicit in _KEY_VAR and _provider_usable(explicit):
-        return explicit
-    # Fall back to first usable in priority order
-    chain = _fallback_chain(tier)
-    if chain:
-        return chain[0]
-    raise RuntimeError("No usable LLM provider found. Enable at least one in the Settings tab.")
-
-
 def _model_matches_provider(model: str, provider: str) -> bool:
     return any(model.startswith(pfx) for pfx in _FAMILY_PREFIX[provider])
 
 
 def _get_model(provider: str) -> str:
+    """Smart-tier model: env override only if it belongs to the provider."""
     explicit = os.environ.get("LLM_MODEL", "").strip()
     if explicit and _model_matches_provider(explicit, provider):
         return explicit
@@ -110,21 +96,11 @@ def _get_model(provider: str) -> str:
 
 
 def _get_cheap_model(provider: str) -> str:
+    """Cheap-tier model: env override only if it belongs to the provider."""
     explicit = os.environ.get("LLM_MODEL_CHEAP", "").strip()
     if explicit and _model_matches_provider(explicit, provider):
         return explicit
     return _DEFAULT_CHEAP[provider]
-
-
-# ── Rate-limit detection ──────────────────────────────────────────────────────
-
-def _is_rate_limit(exc: Exception) -> bool:
-    """Return True if this exception looks like a 429 / quota error."""
-    msg = str(exc).lower()
-    return any(k in msg for k in (
-        "429", "rate limit", "quota", "too many requests",
-        "resource_exhausted", "exceeded", "retry_delay",
-    ))
 
 
 # ── Provider-specific callers ─────────────────────────────────────────────────
@@ -222,83 +198,39 @@ def _last_usage_for(provider: str) -> dict | None:
     return getattr(fn, "last_usage", None)
 
 
-# ── Dispatch with auto-fallback ───────────────────────────────────────────────
+# ── Single-provider dispatch ──────────────────────────────────────────────────
 
-def _dispatch_with_fallback(system, user, tier, *, primary_provider=None,
-                             primary_model=None, max_tokens, json_mode=False):
-    """
-    Try the primary provider. If it raises a rate-limit error, automatically
-    try the next enabled provider in the fallback chain.
-    Logs each fallback so the user can see it in the Live tab.
-    """
-    chain = _fallback_chain(tier)
-    if primary_provider and primary_provider not in chain:
-        chain = [primary_provider] + chain  # always try the explicit pick first
-
-    tried = []
-    last_exc = None
-    for provider in chain:
-        if provider in tried:
-            continue
-        tried.append(provider)
-        model = primary_model if (provider == primary_provider and primary_model) else (
-            _get_model(provider) if tier == "smart" else _get_cheap_model(provider)
-        )
-        try:
-            api_key = _get_api_key(provider)
-        except RuntimeError:
-            continue
-        try:
-            out = _dispatch(system, user, provider, model, api_key, max_tokens, json_mode)
-            _record(provider, success=True, usage=_last_usage_for(provider))
-            if len(tried) > 1:
-                log.info(f"fallback succeeded with {provider} (tried: {tried[:-1]})")
-            return out
-        except Exception as exc:
-            _record(provider, success=False, usage=_last_usage_for(provider))
-            last_exc = exc
-            # Fall back on rate limits, missing packages, or auth errors so
-            # one broken provider never blocks the whole pipeline.
-            should_fallback = (
-                _is_rate_limit(exc)
-                or isinstance(exc, (ImportError, ModuleNotFoundError))
-                or any(k in str(exc).lower() for k in (
-                    "no module", "api key", "authentication", "permission",
-                    "invalid key", "unauthorized", "no text",
-                ))
-            )
-            if should_fallback:
-                log.warning(f"{provider} failed ({type(exc).__name__}: {exc}) — trying next provider")
-                continue
-            raise
-
-    if last_exc:
-        raise last_exc
-    raise RuntimeError(f"No providers available for tier={tier}")
+def _run(system, user, *, tier: str, max_tokens: int, json_mode: bool) -> str:
+    """Resolve the selected provider + tier model and make exactly one call.
+    No fallback — a failure is raised with an actionable message."""
+    provider = _selected_provider()
+    model = _get_model(provider) if tier == "smart" else _get_cheap_model(provider)
+    api_key = _get_api_key(provider)   # raises a clear RuntimeError if missing
+    try:
+        out = _dispatch(system, user, provider, model, api_key, max_tokens, json_mode)
+        _record(provider, success=True, usage=_last_usage_for(provider))
+        return out
+    except Exception as exc:
+        _record(provider, success=False, usage=_last_usage_for(provider))
+        raise RuntimeError(
+            f"Selected provider '{provider}' failed: {exc}. "
+            f"Check the {_KEY_VAR[provider]} in Settings or switch provider."
+        ) from exc
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
 def complete(system, user, *, provider=None, model=None, api_key=None,
              max_tokens=4096, json_mode=False):
-    """Smart-tier completion - resume + cover letter writing."""
-    primary = provider or _get_provider("smart")
-    return _dispatch_with_fallback(
-        system, user, "smart",
-        primary_provider=primary,
-        primary_model=model,
-        max_tokens=max_tokens,
-        json_mode=json_mode,
-    )
+    """Smart-tier completion (resume + cover letter) on the selected provider.
+
+    `provider`/`model`/`api_key` are accepted for backward-compat but the engine
+    always uses the single selected provider; set LLM_MODEL to override the
+    smart-tier model for that provider."""
+    return _run(system, user, tier="smart", max_tokens=max_tokens, json_mode=json_mode)
 
 
 def complete_cheap(system, user, *, provider=None, api_key=None,
                    max_tokens=1024, json_mode=False):
-    """Cheap-tier - Haiku / Gemini Flash / GPT-4o-mini. Auto-falls back on 429."""
-    primary = provider or _get_provider("cheap")
-    return _dispatch_with_fallback(
-        system, user, "cheap",
-        primary_provider=primary,
-        max_tokens=max_tokens,
-        json_mode=json_mode,
-    )
+    """Cheap-tier completion on the selected provider (no fallback)."""
+    return _run(system, user, tier="cheap", max_tokens=max_tokens, json_mode=json_mode)

@@ -180,16 +180,25 @@ class TailorAgent(Agent):
         if self.fetch_company_page and app.company:
             about_text = self._try_fetch_company_about(app.company)
 
-        try:
-            brief = self._call_research_llm(app.title, app.company, jd_text, about_text)
-            app.company_about    = brief.get("company_about", "")
-            app.company_size     = brief.get("company_size", "")
-            app.company_industry = brief.get("company_industry", "")
-            app.company_website  = brief.get("company_website", "")
-            app.research_notes   = self._compose_research_notes(brief)
-        except Exception as e:
-            self.warn(f"research LLM failed for {app.title}: {e}")
-            app.research_notes = f"Company: {app.company}. (Research failed; using JD only.)"
+        # Phase 4: cache the research brief by (title, company, jd hash) so a
+        # repeat run never re-pays the LLM call for the same posting.
+        from core import cache as _cache
+        import hashlib as _hl
+        brief_key = f"{app.company}|{app.title}|{_hl.sha1(jd_text.encode('utf-8')).hexdigest()[:12]}"
+        brief = _cache.get("research_brief", brief_key, ttl_seconds=14 * 86400)
+        if brief is None:
+            try:
+                brief = self._call_research_llm(app.title, app.company, jd_text, about_text)
+                _cache.set("research_brief", brief_key, brief)
+            except Exception as e:
+                self.warn(f"research LLM failed for {app.title}: {e}")
+                app.research_notes = f"Company: {app.company}. (Research failed; using JD only.)"
+                return
+        app.company_about    = brief.get("company_about", "")
+        app.company_size     = brief.get("company_size", "")
+        app.company_industry = brief.get("company_industry", "")
+        app.company_website  = brief.get("company_website", "")
+        app.research_notes   = self._compose_research_notes(brief)
 
     def _call_research_llm(self, title: str, company: str, jd: str, about: str) -> dict:
         from llm.client import complete_cheap
@@ -238,11 +247,19 @@ class TailorAgent(Agent):
         slug = re.sub(r"[^a-z0-9]+", "", company.lower())
         if not slug:
             return ""
+        # Phase 4: cache the company About fetch by slug (30-day TTL).
+        from core import cache as _cache
+        cached = _cache.get("company_about", slug, ttl_seconds=30 * 86400)
+        if cached is not None:
+            return cached
+        text = ""
         for u in (f"https://{slug}.com/about", f"https://{slug}.com"):
             t = self._fetch_url_text(u)
             if t:
-                return t
-        return ""
+                text = t
+                break
+        _cache.set("company_about", slug, text)
+        return text
 
     @staticmethod
     def _strip_html(html: str) -> str:
@@ -272,6 +289,9 @@ class TailorAgent(Agent):
             Path(__file__).resolve().parent.parent
         )
         target_score = int(os.environ.get("ATS_TARGET_MIN", "80") or 80)
+        # One rewrite pass by default — the score→rewrite loop is the headline
+        # differentiator. Set ATS_MAX_REWRITES=0 to skip it for speed, or higher
+        # to push harder toward the target.
         max_rewrites = int(os.environ.get("ATS_MAX_REWRITES", "1") or 1)
 
         self.info(f"writing for {app.title} @ {app.company} (target ATS >= {target_score})")
@@ -346,11 +366,26 @@ class TailorAgent(Agent):
         cover_text  = best["cover"]
         resume_pdf  = app.folder / "resume.pdf"
         cover_pdf   = app.folder / "cover_letter.pdf"
+
+        # Conditional clickable header links — only the ones actually in the
+        # profile are shown (empties are filtered by the PDF generator).
+        p = self.profile
+        links = {
+            "LinkedIn":  getattr(p, "linkedin_url", "") or "",
+            "GitHub":    getattr(p, "github_url", "") or "",
+            "Portfolio": getattr(p, "website_url", "") or "",
+        }
+        full_name     = getattr(p, "full_name", "") or ""
+        portfolio_url = getattr(p, "website_url", "") or ""
+
         try:
-            generate_resume_pdf(resume_text, str(resume_pdf))
+            generate_resume_pdf(resume_text, str(resume_pdf), links=links)
             (app.folder / "resume.txt").write_text(resume_text, encoding="utf-8")
             if cover_text:
-                generate_cover_letter_pdf(cover_text, str(cover_pdf))
+                generate_cover_letter_pdf(
+                    cover_text, str(cover_pdf),
+                    links=links, name=full_name, portfolio_url=portfolio_url,
+                )
                 (app.folder / "cover_letter.txt").write_text(cover_text, encoding="utf-8")
         except Exception as e:
             self.warn(f"PDF render failed: {e}")
@@ -385,30 +420,9 @@ class TailorAgent(Agent):
         )
 
     def _complete_with_fallback(self, system: str, user: str) -> str:
-        """Try the smart-tier provider; silently fall back on 429/quota errors."""
-        from llm.client import _get_provider, _provider_has_real_key  # type: ignore
-        primary = _get_provider("smart")
-        try:
-            return complete(system, user, max_tokens=8000, json_mode=True)
-        except Exception as e:
-            msg = str(e)
-            is_quota = (
-                "429" in msg or "quota" in msg.lower()
-                or "rate limit" in msg.lower() or "exceeded" in msg.lower()
-            )
-            if not is_quota:
-                raise
-            for fb in ("claude", "openai", "gemini"):
-                if fb == primary:
-                    continue
-                if _provider_has_real_key(fb):  # type: ignore
-                    self.warn(
-                        f"smart provider '{primary}' hit quota; "
-                        f"falling back to '{fb}' for this writer call"
-                    )
-                    return complete(system, user, provider=fb,
-                                    max_tokens=8000, json_mode=True)
-            raise
+        """Single-provider smart-tier writer call. No cross-provider fallback —
+        the client raises a clear error if the selected provider fails."""
+        return complete(system, user, max_tokens=8000, json_mode=True)
 
     @staticmethod
     def _parse_writer_response(raw: str) -> dict | None:
