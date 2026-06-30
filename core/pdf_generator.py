@@ -11,9 +11,10 @@ Header items (Portfolio • GitHub • LinkedIn) are PLAIN TEXT — no href, no 
 
 import re
 from pathlib import Path
+from xml.sax.saxutils import escape
 
 from reportlab.lib import colors
-from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
@@ -21,7 +22,6 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import (
     HRFlowable,
-    KeepTogether,
     Paragraph,
     SimpleDocTemplate,
     Spacer,
@@ -116,6 +116,12 @@ def _build_styles():
         spaceAfter=1,
         leading=13,
     )
+    # Clickable header links (LinkedIn / GitHub / Portfolio) — centered, accent colour.
+    contact_link_style = ParagraphStyle(
+        "ContactLink",
+        parent=contact_style,
+        textColor=colors.HexColor("#1a56db"),
+    )
     section_style = ParagraphStyle(
         "Section",
         parent=base["Normal"],
@@ -160,6 +166,7 @@ def _build_styles():
         fontName=_FONT,
         leading=13,
         spaceAfter=3,
+        alignment=TA_JUSTIFY,        # justify resume body / summary paragraphs
     )
     cover_body_style = ParagraphStyle(
         "CoverBody",
@@ -168,17 +175,36 @@ def _build_styles():
         fontName=_FONT,
         leading=14,
         spaceAfter=0,
+        alignment=TA_JUSTIFY,        # justify all cover-letter paragraphs
+    )
+    # Cover-letter closing lines (Thank you, / name / portfolio) — left aligned
+    # so single short lines don't get justify gaps.
+    close_style = ParagraphStyle(
+        "Close",
+        parent=base["Normal"],
+        fontSize=11,
+        fontName=_FONT,
+        leading=14,
+        spaceAfter=0,
+    )
+    close_link_style = ParagraphStyle(
+        "CloseLink",
+        parent=close_style,
+        textColor=colors.HexColor("#1a56db"),
     )
 
     return {
-        "name":       name_style,
-        "contact":    contact_style,
-        "section":    section_style,
-        "job_role":   job_role_style,
-        "job_meta":   job_meta_style,
-        "bullet":     bullet_style,
-        "body":       body_style,
-        "cover_body": cover_body_style,
+        "name":         name_style,
+        "contact":      contact_style,
+        "contact_link": contact_link_style,
+        "section":      section_style,
+        "job_role":     job_role_style,
+        "job_meta":     job_meta_style,
+        "bullet":       bullet_style,
+        "body":         body_style,
+        "cover_body":   cover_body_style,
+        "close":        close_style,
+        "close_link":   close_link_style,
     }
 
 
@@ -237,11 +263,79 @@ def _split_job_entry(line: str):
     return line.strip(), ""
 
 
+# ── Header links + cover-letter close helpers ─────────────────────────────────
+
+_LINK_WORDS = ("linkedin", "github", "portfolio", "website", "gitlab", "behance", "dribbble")
+
+
+def _is_links_label_line(line: str) -> bool:
+    """True for a header line that is just link labels/URLs (e.g.
+    'Portfolio • GitHub • LinkedIn' or 'linkedin.com/in/x • github.com/x') so we
+    can drop it and render real, conditional, clickable links instead."""
+    l = _strip_markdown(line).lower().strip()
+    if not l or "@" in l:            # email lines are not link-label lines
+        return False
+    if not any(w in l for w in _LINK_WORDS):
+        return False
+    return len(l) < 90               # a label line is short, not a sentence
+
+
+def _href(url: str) -> str:
+    url = (url or "").strip()
+    if not url:
+        return ""
+    if not re.match(r"^https?://", url, re.I):
+        url = "https://" + url
+    return url
+
+
+def _build_links_paragraph(links: dict, style):
+    """Build one centered paragraph of clickable links from the links present in
+    the profile. links is an ordered dict {label: url}; empty values omitted.
+    Returns a Paragraph or None when there are no links."""
+    parts = []
+    for label, url in (links or {}).items():
+        if url and str(url).strip():
+            parts.append(f'<a href="{escape(_href(url))}">{escape(label)}</a>')
+    if not parts:
+        return None
+    return Paragraph("  •  ".join(parts), style)
+
+
+_SIGNOFF_RE = re.compile(
+    r"^(sincerely|thank you|thanks|thank you for your (time|consideration)|"
+    r"best regards|warm regards|kind regards|regards|best|respectfully|"
+    r"yours (truly|sincerely|faithfully))[,.!]*$",
+    re.IGNORECASE,
+)
+
+
+def _strip_trailing_signoff(text: str) -> str:
+    """Remove a trailing sign-off block (e.g. 'Sincerely,' + name) the model may
+    have written, so we can append our own deterministic close without
+    duplicating it. Only looks at the last few lines to avoid touching the body."""
+    lines = text.rstrip().split("\n")
+    # Drop trailing blank lines first.
+    while lines and not lines[-1].strip():
+        lines.pop()
+    # Scan only the last 4 non-empty lines for a sign-off keyword line.
+    for back in range(1, min(4, len(lines)) + 1):
+        if _SIGNOFF_RE.match(lines[-back].strip()):
+            lines = lines[:-back]
+            break
+    return "\n".join(lines).rstrip()
+
+
 # ── Shared header-block parser ────────────────────────────────────────────────
 
-def _parse_header_block(lines: list[str], styles: dict) -> tuple[list, int]:
+def _parse_header_block(lines: list[str], styles: dict, links: dict | None = None) -> tuple[list, int]:
     """Extract name + contact lines from the top of a document.
-    Returns (flowables, next_line_index)."""
+    Returns (flowables, next_line_index).
+
+    When `links` is provided (even if empty), any link-label line written by the
+    model is dropped and replaced with real, conditional, clickable links built
+    from the profile — so dead 'Portfolio • GitHub • LinkedIn' labels never show.
+    When `links` is None, contact lines render as-is (legacy behaviour)."""
     story = []
 
     # Skip leading blank lines
@@ -264,9 +358,18 @@ def _parse_header_block(lines: list[str], styles: dict) -> tuple[list, int]:
             break
         if _is_section_header(lines[i]) or l.lower().startswith("dear "):
             break
-        # Each contact line gets its own centered paragraph (plain text, no links)
+        # Drop the model's link-label line when we'll render real links instead.
+        if links is not None and _is_links_label_line(l):
+            i += 1
+            continue
         story.append(Paragraph(_strip_markdown(l), styles["contact"]))
         i += 1
+
+    # Real, conditional, clickable links from the profile (only those present).
+    if links is not None:
+        link_para = _build_links_paragraph(links, styles["contact_link"])
+        if link_para is not None:
+            story.append(link_para)
 
     story.append(Spacer(1, 4))
     story.append(HRFlowable(width="100%", thickness=0.8, color=colors.black, spaceAfter=4))
@@ -275,7 +378,7 @@ def _parse_header_block(lines: list[str], styles: dict) -> tuple[list, int]:
 
 # ── Resume parser ─────────────────────────────────────────────────────────────
 
-def _parse_resume_to_flowables(text: str, styles: dict) -> list:
+def _parse_resume_to_flowables(text: str, styles: dict, links: dict | None = None) -> list:
     story = []
     lines = text.split("\n")
     while lines and not lines[0].strip():
@@ -285,7 +388,7 @@ def _parse_resume_to_flowables(text: str, styles: dict) -> list:
     if not lines:
         return story
 
-    header_flowables, i = _parse_header_block(lines, styles)
+    header_flowables, i = _parse_header_block(lines, styles, links)
     story.extend(header_flowables)
 
     while i < len(lines):
@@ -344,7 +447,7 @@ def _parse_resume_to_flowables(text: str, styles: dict) -> list:
 
 # ── Cover letter parser ───────────────────────────────────────────────────────
 
-def _parse_letter_to_flowables(text: str, styles: dict) -> list:
+def _parse_letter_to_flowables(text: str, styles: dict, links: dict | None = None) -> list:
     story = []
     lines = text.split("\n")
     while lines and not lines[0].strip():
@@ -364,7 +467,7 @@ def _parse_letter_to_flowables(text: str, styles: dict) -> list:
         and first_content.strip().lower().strip(":") not in SECTION_KEYWORDS
     )
     if has_header:
-        header_flowables, start_i = _parse_header_block(lines, styles)
+        header_flowables, start_i = _parse_header_block(lines, styles, links)
         story.extend(header_flowables)
         remaining_text = "\n".join(lines[start_i:])
     else:
@@ -388,8 +491,12 @@ def _parse_letter_to_flowables(text: str, styles: dict) -> list:
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
-def generate_resume_pdf(text: str, output_path: str) -> str:
-    """Render resume text to a PDF file. Returns the output path."""
+def generate_resume_pdf(text: str, output_path: str, *, links: dict | None = None) -> str:
+    """Render resume text to a PDF file. Returns the output path.
+
+    links: ordered {label: url} of the profile's links (LinkedIn/GitHub/Portfolio).
+    Only the ones with a value are shown, as clickable links; pass {} to show
+    none. None keeps the legacy plain-text header behaviour."""
     styles = _build_styles()
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
 
@@ -403,13 +510,20 @@ def generate_resume_pdf(text: str, output_path: str) -> str:
         title="Tailored Resume",
     )
 
-    story = _parse_resume_to_flowables(text, styles)
+    story = _parse_resume_to_flowables(text, styles, links)
     doc.build(story)
     return output_path
 
 
-def generate_cover_letter_pdf(text: str, output_path: str) -> str:
-    """Render cover letter text to a PDF file. Returns the output path."""
+def generate_cover_letter_pdf(
+    text: str, output_path: str, *,
+    links: dict | None = None, name: str = "", portfolio_url: str = "",
+) -> str:
+    """Render cover letter text to a PDF file. Returns the output path.
+
+    Appends a deterministic close after the body:  'Thank you,' / name /
+    portfolio link (each on its own line; portfolio omitted when not provided).
+    `links` controls the conditional clickable header links (see above)."""
     styles = _build_styles()
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
 
@@ -423,6 +537,20 @@ def generate_cover_letter_pdf(text: str, output_path: str) -> str:
         title="Cover Letter",
     )
 
-    story = _parse_letter_to_flowables(text, styles)
+    # Drop any sign-off the model wrote, then render the body.
+    body_text = _strip_trailing_signoff(text)
+    story = _parse_letter_to_flowables(body_text, styles, links)
+
+    # Deterministic close: Thank you, / name / portfolio (each on its own line).
+    story.append(Spacer(1, 12))
+    story.append(Paragraph("Thank you,", styles["close"]))
+    if (name or "").strip():
+        story.append(Paragraph(escape(name.strip()), styles["close"]))
+    if (portfolio_url or "").strip():
+        story.append(Paragraph(
+            f'<a href="{escape(_href(portfolio_url))}">{escape(portfolio_url.strip())}</a>',
+            styles["close_link"],
+        ))
+
     doc.build(story)
     return output_path

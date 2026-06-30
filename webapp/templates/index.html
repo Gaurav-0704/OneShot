@@ -11,6 +11,13 @@
 <!-- Particle background -->
 <canvas id="bg-canvas" aria-hidden="true"></canvas>
 
+<!-- Mobile top bar (shown only on narrow screens) -->
+<div class="mobile-topbar">
+  <button class="mobile-menu-btn" id="mobile-menu-btn" aria-label="Open menu">☰</button>
+  <span class="mobile-brand">OneShot</span>
+</div>
+<div class="mobile-overlay" id="mobile-overlay" aria-hidden="true"></div>
+
 <div class="layout">
 
 <!-- ══ LEFT SIDEBAR ═══════════════════════════════════════════════════════ -->
@@ -45,7 +52,7 @@
 
     <button class="nav-item" data-tab="apply" onclick="switchTab('apply')">
       <span class="nav-label">
-        <span class="nav-icon">⚡</span>Apply
+        <span class="nav-icon">⚡</span>Pipeline
       </span>
       <span class="nav-badge warn" id="count-pending">0</span>
     </button>
@@ -251,11 +258,25 @@
   <div class="page-head">
     <div>
       <div class="page-title">Search &amp; Run</div>
-      <div class="page-sub">Configure search criteria and start an automated application run</div>
+      <div class="page-sub">Configure search criteria and generate tailored resumes + cover letters to review</div>
     </div>
     <div class="page-actions">
       <button class="btn primary" id="btn-run">▶ Start Run</button>
       <button class="btn" id="btn-save-search">💾 Save Search</button>
+    </div>
+  </div>
+
+  <!-- Background discovery (Phase 3) -->
+  <div class="card no-lift" id="bg-discovery-card" style="margin-bottom:14px">
+    <div class="card-body" style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding:14px 18px">
+      <div style="flex:1;min-width:200px">
+        <div style="font-size:13px;font-weight:700">🔄 Continuous background search</div>
+        <div class="muted small" id="bg-discovery-status">Off — runs discovery on a timer so fresh matches appear on their own.</div>
+      </div>
+      <label class="muted small" style="display:flex;align-items:center;gap:6px">Every
+        <input type="number" id="bg-interval-min" min="5" max="1440" value="60" style="width:70px"/> min</label>
+      <button type="button" class="btn" id="btn-bg-start">Start</button>
+      <button type="button" class="btn" id="btn-bg-stop">Stop</button>
     </div>
   </div>
 
@@ -297,6 +318,17 @@
           </div>
           <button class="btn tiny" onclick="renderValidity()">↺ Refresh</button>
         </div>
+
+        <!-- Quick resume upload + auto-fill (also on the Profile tab) -->
+        <label class="dropzone" id="search-dropzone" style="cursor:pointer;margin-top:14px">
+          <input type="file" accept=".pdf,.docx,.doc,.txt" hidden id="search-resume-file"/>
+          <div class="dz-inner">
+            <div class="dz-icon">📄</div>
+            <div class="dz-text" id="search-dz-name">Drop your resume here or click to browse — auto-fills your profile</div>
+            <div class="dz-hint" id="search-dz-meta">PDF / DOCX / DOC / TXT · max 10 MB</div>
+          </div>
+        </label>
+        <div id="search-parse-status" class="muted small" style="margin-top:8px"></div>
       </div>
     </div>
 
@@ -316,6 +348,10 @@
             <div class="field">
               <label>Job Titles / Search Terms</label>
               <textarea name="search_terms" rows="4" placeholder="Software Engineer&#10;Backend Engineer&#10;Data Engineer"></textarea>
+              <div style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap">
+                <button type="button" class="btn tiny" id="btn-suggest-terms">✨ Suggest from Resume</button>
+                <span class="muted small" id="suggest-terms-status"></span>
+              </div>
               <div class="field-hint">One per line. Used verbatim on each job board.</div>
             </div>
             <div class="field">
@@ -323,6 +359,27 @@
               <textarea name="locations" rows="4" placeholder="San Francisco, CA&#10;Remote&#10;New York, NY"></textarea>
               <div class="field-hint">One per line. Leave blank to search everywhere.</div>
             </div>
+          </div>
+
+          <!-- Geo bounding (Phase 1) -->
+          <div class="grid-2" style="margin-bottom:14px">
+            <div class="field">
+              <label>Allowed Countries</label>
+              <input type="text" name="allowed_countries" placeholder="United States"/>
+              <div class="field-hint">Comma-separated. Only jobs in these countries are kept. Blank = no geo filter.</div>
+            </div>
+            <div class="field">
+              <label>Remote Scope</label>
+              <select name="remote_scope">
+                <option value="country">My country only</option>
+                <option value="worldwide">Worldwide</option>
+              </select>
+              <div class="field-hint">"My country only" drops foreign remote leaks (e.g. China/HK on a US search).</div>
+            </div>
+          </div>
+
+          <div class="field" style="margin-bottom:14px">
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:500;text-transform:none;letter-spacing:0;color:var(--text)"><input type="checkbox" name="fresh_only" checked> Only show new jobs (skip already-seen postings &amp; reposts)</label>
           </div>
 
           <!-- Work type -->
@@ -414,12 +471,6 @@
             </div>
           </div>
 
-          <!-- Suggest from resume -->
-          <div style="display:flex;gap:8px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
-            <button type="button" class="btn tiny" id="btn-suggest-terms">✨ Suggest from Resume</button>
-            <span class="muted small" id="suggest-terms-status"></span>
-          </div>
-
           <!-- Blacklists -->
           <details style="margin-bottom:4px">
             <summary style="cursor:pointer;font-size:13px;font-weight:700;color:var(--muted);padding:6px 0;user-select:none">Blacklists</summary>
@@ -443,12 +494,13 @@
             <summary>Run options</summary>
             <div class="field-grid">
               <div class="field">
-                <label>Max applications to tailor <span class="muted small">(blank = all)</span></label>
+                <label>Number of applications to find &amp; prepare <span class="muted small">(blank = all)</span></label>
                 <input type="number" name="limit" min="1" max="500" placeholder="e.g. 5"/>
+                <div class="field-hint">Stops once this many are successfully saved — failures don't use up the count.</div>
               </div>
               <label class="checkbox-label"><input type="checkbox" name="ats_check" checked/> Run ATS rewrite loop</label>
-              <label class="checkbox-label"><input type="checkbox" name="research"/> Research company before writing</label>
-              <label class="checkbox-label"><input type="checkbox" name="use_cache"/> Use cached discovery (skip re-scraping)</label>
+              <label class="checkbox-label"><input type="checkbox" name="research" checked/> Research company before writing</label>
+              <label class="checkbox-label"><input type="checkbox" name="use_cache" checked/> Use cached discovery (skip re-scraping)</label>
             </div>
           </details>
 
@@ -465,6 +517,18 @@
       <div class="card-body" id="gap-content">
         <div class="keyword-cloud" id="gap-keywords"></div>
         <div id="gap-advice" style="margin-top:10px;font-size:12.5px;color:var(--muted)"></div>
+      </div>
+    </div>
+
+    <!-- Bottom Start-Run bar (Phase 5) -->
+    <div class="card no-lift" id="bottom-run-bar">
+      <div class="card-body" style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
+        <div class="field" style="flex:1;min-width:220px;margin:0">
+          <label>Number of applications to find &amp; prepare <span class="muted small">(blank = all)</span></label>
+          <input type="number" id="limit-bottom" min="1" max="500" placeholder="e.g. 5"/>
+        </div>
+        <button class="btn primary run-mirror" id="btn-run-bottom">▶ Start Run</button>
+        <button class="btn ghost run-mirror" id="btn-save-search-bottom">💾 Save</button>
       </div>
     </div>
   </div>
@@ -528,13 +592,23 @@
 <section class="tab" id="tab-apply" hidden>
   <div class="page-head">
     <div>
-      <div class="page-title">Apply</div>
-      <div class="page-sub">Review and submit ready-to-apply jobs</div>
+      <div class="page-title">Pipeline</div>
+      <div class="page-sub">Track every job from discovery to interview — you apply, OneShot prepares</div>
     </div>
     <div class="page-actions">
-      <button class="btn" onclick="loadApplications('pending')">↺ Refresh</button>
+      <button class="btn" onclick="loadPipeline(); loadApplications('pending')">↺ Refresh</button>
     </div>
   </div>
+
+  <!-- Top summary widgets (Phase 8) -->
+  <div class="pipe-stats" id="pipeline-stats">
+    <div class="pipe-stat"><div class="ps-num" id="pipe-count-discovered">—</div><div class="ps-label">🔍 Discovered</div></div>
+    <div class="pipe-stat"><div class="ps-num" id="pipe-count-tailored">—</div><div class="ps-label">✍️ Tailored</div></div>
+    <div class="pipe-stat"><div class="ps-num" id="pipe-count-applied">—</div><div class="ps-label">✅ Applied</div></div>
+    <div class="pipe-stat"><div class="ps-num" id="pipe-count-interview">—</div><div class="ps-label">🎤 Interview</div></div>
+  </div>
+
+  <h3 style="margin:22px 0 10px">Prepared applications</h3>
   <div id="pending-table"><div class="empty"><div class="empty-icon">⚡</div><div class="empty-title">No jobs pending review</div><div class="empty-sub">Run a search to queue jobs</div></div></div>
 </section>
 
@@ -589,7 +663,7 @@
   </div>
 
   <!-- Resume upload — shown first so new users know to start here -->
-  <div class="card no-lift" style="border:1px solid var(--accent-dim,rgba(79,142,247,.35))">
+  <div class="card no-lift" id="sec-resume" style="border:1px solid var(--accent-dim,rgba(79,142,247,.35))">
     <div class="card-head">
       <h3>📄 Resume <span class="badge req">required</span></h3>
       <div style="display:flex;gap:8px">
@@ -627,32 +701,66 @@
   <form id="profile-form" onsubmit="return false">
 
     <!-- Personal Info -->
-    <div class="card no-lift" id="profile-section-personal">
+    <div class="card no-lift" id="sec-identity">
       <div class="card-head"><h3>Personal Information</h3></div>
       <div class="card-body">
         <div class="grid-2">
-          <div class="field"><label>First Name <span class="badge req">required</span></label><input type="text" name="first_name" placeholder="Jane" autocomplete="given-name"/></div>
-          <div class="field"><label>Last Name  <span class="badge req">required</span></label><input type="text" name="last_name" placeholder="Doe" autocomplete="family-name"/></div>
-          <div class="field"><label>Email <span class="badge req">required</span></label><input type="email" name="email" placeholder="jane@example.com" autocomplete="email"/></div>
-          <div class="field"><label>Phone</label><input type="tel" name="phone" placeholder="+1 555 000 0000" autocomplete="tel"/></div>
-          <div class="field"><label>City</label><input type="text" name="city" placeholder="San Francisco" autocomplete="address-level2"/></div>
-          <div class="field"><label>State / Province</label><input type="text" name="state" placeholder="CA"/></div>
-          <div class="field"><label>Country</label><input type="text" name="country" placeholder="United States" autocomplete="country-name"/></div>
-          <div class="field"><label>LinkedIn URL <span class="badge rec">optional</span></label><input type="url" name="linkedin_url" placeholder="https://linkedin.com/in/…"/></div>
-          <div class="field span-2"><label>GitHub / Portfolio URL <span class="badge rec">optional</span></label><input type="url" name="github_url" placeholder="https://github.com/…"/></div>
+          <div class="field"><label>First Name <span class="badge req">required</span><span class="req-dot" data-field="personal.name.first"></span></label><input type="text" name="first_name" data-required="personal.name.first" placeholder="Jane" autocomplete="given-name"/></div>
+          <div class="field"><label>Last Name <span class="badge req">required</span><span class="req-dot" data-field="personal.name.last"></span></label><input type="text" name="last_name" data-required="personal.name.last" placeholder="Doe" autocomplete="family-name"/></div>
+          <div class="field"><label>Email <span class="badge req">required</span><span class="req-dot" data-field="personal.contact.email"></span></label><input type="email" name="email" data-required="personal.contact.email" placeholder="jane@example.com" autocomplete="email"/></div>
+          <div class="field"><label>Phone <span class="badge rec">optional</span></label><input type="tel" name="phone" placeholder="+1 555 000 0000" autocomplete="tel"/></div>
         </div>
       </div>
     </div>
 
-    <!-- Resume upload -->
-    <!-- Resume card moved to top of profile page -->
+    <!-- Address -->
+    <div class="card no-lift" id="sec-address">
+      <div class="card-head"><h3>Location</h3></div>
+      <div class="card-body">
+        <div class="grid-2">
+          <div class="field"><label>City <span class="badge req">required</span><span class="req-dot" data-field="personal.address.city"></span></label><input type="text" name="city" data-required="personal.address.city" placeholder="San Francisco" autocomplete="address-level2"/></div>
+          <div class="field"><label>State / Province <span class="badge rec">optional</span></label><input type="text" name="state" placeholder="CA"/></div>
+          <div class="field"><label>Country <span class="badge req">required</span><span class="req-dot" data-field="personal.address.country"></span></label><input type="text" name="country" data-required="personal.address.country" placeholder="United States" autocomplete="country-name"/></div>
+        </div>
+      </div>
+    </div>
 
-    <!-- Summary / bio -->
-    <div class="card no-lift" id="profile-section-summary">
-      <div class="card-head"><h3>Professional Summary <span class="badge rec">recommended</span></h3></div>
+    <!-- Links -->
+    <div class="card no-lift" id="sec-links">
+      <div class="card-head"><h3>Links</h3></div>
+      <div class="card-body">
+        <div class="grid-2">
+          <div class="field"><label>LinkedIn URL <span class="badge rec">optional</span></label><input type="url" name="linkedin_url" placeholder="https://linkedin.com/in/…"/></div>
+          <div class="field"><label>GitHub / Portfolio URL <span class="badge rec">optional</span></label><input type="url" name="github_url" placeholder="https://github.com/…"/></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Experience -->
+    <div class="card no-lift" id="sec-experience">
+      <div class="card-head"><h3>Experience</h3></div>
+      <div class="card-body">
+        <div class="grid-2">
+          <div class="field"><label>Years of Experience <span class="badge req">required</span><span class="req-dot" data-field="questions.years_of_experience"></span></label><input type="number" name="years_of_experience" data-required="questions.years_of_experience" min="0" max="60" placeholder="5"/></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- About you -->
+    <div class="card no-lift" id="sec-about">
+      <div class="card-head"><h3>About You</h3></div>
       <div class="card-body">
         <div class="field">
-          <textarea name="summary" rows="5" placeholder="A 2–3 sentence professional bio used in cover letters and applications…"></textarea>
+          <label>Profile summary for AI <span class="badge req">required</span><span class="req-dot" data-field="questions.user_information_summary"></span></label>
+          <textarea name="user_information_summary" data-required="questions.user_information_summary" rows="4" placeholder="3–5 factual sentences other AI agents use as your identity: current role, years, key skills, work-type preferences…"></textarea>
+        </div>
+        <div class="field">
+          <label>Headline <span class="badge rec">optional</span></label>
+          <input type="text" name="headline" placeholder="AI/ML Engineer · LLMs · Python"/>
+        </div>
+        <div class="field">
+          <label>Professional Summary <span class="badge rec">optional</span></label>
+          <textarea name="linkedin_summary" rows="4" placeholder="A longer bio used in cover letters and applications…"></textarea>
         </div>
       </div>
     </div>
@@ -698,26 +806,15 @@
             </button>
           </div>
 
-          <div class="grid-2" style="margin-top:18px">
+          <div class="muted small" style="margin-top:12px">
+            The whole engine runs on this one provider —
+            <b id="active-provider-label">claude</b> — for every step.
+          </div>
+          <div class="grid-2" style="margin-top:14px">
             <div class="field"><label>Model Override (smart)</label><input type="text" name="LLM_MODEL" placeholder="leave blank for default"/></div>
             <div class="field"><label>Model Override (cheap)</label><input type="text" name="LLM_MODEL_CHEAP" placeholder="leave blank for default"/></div>
-            <div class="field"><label>Smart-tier provider</label>
-              <select name="LLM_PROVIDER_SMART">
-                <option value="">Same as default</option>
-                <option value="claude">claude</option>
-                <option value="openai">openai</option>
-                <option value="gemini">gemini</option>
-              </select>
-            </div>
-            <div class="field"><label>Cheap-tier provider</label>
-              <select name="LLM_PROVIDER_CHEAP">
-                <option value="">Same as default</option>
-                <option value="claude">claude</option>
-                <option value="openai">openai</option>
-                <option value="gemini">gemini</option>
-              </select>
-            </div>
           </div>
+          <div class="field-hint" style="margin-top:6px">Overrides apply only when the model belongs to the active provider.</div>
         </div>
       </div>
 
@@ -725,9 +822,15 @@
         <div class="card-head"><h3>API Keys</h3></div>
         <div class="card-body">
           <div class="grid-2">
-            <div class="field"><label>Anthropic API Key</label><input type="password" name="ANTHROPIC_API_KEY" placeholder="sk-ant-…" autocomplete="off"/></div>
-            <div class="field"><label>OpenAI API Key</label><input type="password" name="OPENAI_API_KEY" placeholder="sk-…" autocomplete="off"/></div>
-            <div class="field"><label>Gemini API Key</label><input type="password" name="GEMINI_API_KEY" placeholder="AIza…" autocomplete="off"/></div>
+            <div class="field"><label>Anthropic API Key</label>
+              <div style="display:flex;gap:6px"><input type="password" name="ANTHROPIC_API_KEY" placeholder="sk-ant-…" autocomplete="off" style="flex:1"/><button type="button" class="btn tiny ghost btn-remove-key" data-key="ANTHROPIC_API_KEY">Remove</button></div>
+            </div>
+            <div class="field"><label>OpenAI API Key</label>
+              <div style="display:flex;gap:6px"><input type="password" name="OPENAI_API_KEY" placeholder="sk-…" autocomplete="off" style="flex:1"/><button type="button" class="btn tiny ghost btn-remove-key" data-key="OPENAI_API_KEY">Remove</button></div>
+            </div>
+            <div class="field"><label>Gemini API Key</label>
+              <div style="display:flex;gap:6px"><input type="password" name="GEMINI_API_KEY" placeholder="AIza…" autocomplete="off" style="flex:1"/><button type="button" class="btn tiny ghost btn-remove-key" data-key="GEMINI_API_KEY">Remove</button></div>
+            </div>
             <div class="field"><label>Claude Budget (USD/run)</label><input type="number" name="CLAUDE_BUDGET_USD" step="0.01" min="0" placeholder="e.g. 0.50"/></div>
           </div>
         </div>
@@ -738,7 +841,7 @@
         <div class="card-body">
           <div class="grid-2">
             <div class="field"><label>ATS Min Score (0–100)</label><input type="number" name="ATS_TARGET_MIN" min="0" max="100" placeholder="80"/></div>
-            <div class="field"><label>Max ATS Rewrites</label><input type="number" name="ATS_MAX_REWRITES" min="0" max="5" placeholder="1"/></div>
+            <div class="field"><label>Max ATS Rewrites <span class="muted small">(1 = better, 0 = fastest)</span></label><input type="number" name="ATS_MAX_REWRITES" min="0" max="5" placeholder="1"/></div>
           </div>
         </div>
       </div>

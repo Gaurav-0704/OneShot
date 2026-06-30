@@ -43,6 +43,16 @@ class HumanizerAgent(Agent):
         facts = self._build_facts(profile)
         n_issues = 0
 
+        # Same conditional header links + close data the TailorAgent uses, so the
+        # humanizer's PDF re-render keeps clickable links and the proper closing.
+        _links = {
+            "LinkedIn":  getattr(profile, "linkedin_url", "") or "",
+            "GitHub":    getattr(profile, "github_url", "") or "",
+            "Portfolio": getattr(profile, "website_url", "") or "",
+        }
+        _name     = getattr(profile, "full_name", "") or ""
+        _portfolio = getattr(profile, "website_url", "") or ""
+
         # ── Resume ────────────────────────────────────────────────────────────
         if app.tailored_resume_text:
             result = deliver(app.tailored_resume_text, kind="resume", facts=facts)
@@ -57,7 +67,7 @@ class HumanizerAgent(Agent):
             if app.tailored_resume_pdf and app.folder:
                 try:
                     from core.pdf_generator import generate_resume_pdf
-                    generate_resume_pdf(app.tailored_resume_text, str(app.tailored_resume_pdf))
+                    generate_resume_pdf(app.tailored_resume_text, str(app.tailored_resume_pdf), links=_links)
                     (app.folder / "resume.txt").write_text(
                         app.tailored_resume_text, encoding="utf-8"
                     )
@@ -68,15 +78,13 @@ class HumanizerAgent(Agent):
         if app.cover_letter_text:
             result = deliver(app.cover_letter_text, kind="cover", facts=facts)
             app.cover_letter_text = result["text"]
-            # If salutation or sign-off are missing, inject them rather than
-            # just flagging — LLMs reliably skip these despite prompt instructions.
+            # Inject the salutation if the model dropped it. The CLOSING
+            # (Thank you, / name / portfolio) is appended deterministically at
+            # render time, so we no longer inject a sign-off here.
             issues = result["report"].get("issues", [])
             cl = app.cover_letter_text
             if any("salutation" in i for i in issues):
                 cl = "Dear Hiring Manager,\n\n" + cl
-            if any("sign-off" in i for i in issues):
-                name = getattr(profile, "full_name", "") or ""
-                cl = cl.rstrip() + f"\n\nSincerely,\n{name}" if name else cl.rstrip() + "\n\nSincerely,"
             app.cover_letter_text = cl
             if not result["report"]["ok"]:
                 remaining = [i for i in issues if "salutation" not in i and "sign-off" not in i]
@@ -88,7 +96,10 @@ class HumanizerAgent(Agent):
             if app.cover_letter_pdf and app.folder:
                 try:
                     from core.pdf_generator import generate_cover_letter_pdf
-                    generate_cover_letter_pdf(app.cover_letter_text, str(app.cover_letter_pdf))
+                    generate_cover_letter_pdf(
+                        app.cover_letter_text, str(app.cover_letter_pdf),
+                        links=_links, name=_name, portfolio_url=_portfolio,
+                    )
                     (app.folder / "cover_letter.txt").write_text(
                         app.cover_letter_text, encoding="utf-8"
                     )

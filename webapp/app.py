@@ -5,11 +5,16 @@ Single SPA at "/", REST + SSE under "/api/*".
 """
 from __future__ import annotations
 
+import hashlib
 import logging
+import os
 import socket
 from pathlib import Path
 
-from flask import Flask, render_template
+from flask import (
+    Flask, jsonify, redirect, render_template, render_template_string,
+    request, session, url_for,
+)
 from flask_cors import CORS
 
 from webapp.pipeline_runner import PipelineRunner
@@ -40,11 +45,74 @@ def _bootstrap_resume(root: Path) -> None:
         return
     try:
         import urllib.request
-        logging.getLogger(__name__).info(f"Downloading resume from RESUME_URL ...")
+        logging.getLogger(__name__).info("Downloading resume from RESUME_URL ...")
         urllib.request.urlretrieve(url, resume_path)
         logging.getLogger(__name__).info(f"Resume saved to {resume_path}")
     except Exception as e:
         logging.getLogger(__name__).error(f"Failed to download resume: {e}")
+
+
+_LOGIN_PAGE = """<!doctype html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>OneShot — Sign in</title>
+<style>
+  body{margin:0;height:100vh;display:flex;align-items:center;justify-content:center;
+       background:#070b12;color:#e7ecf3;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  .box{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.10);border-radius:14px;
+       padding:30px 28px;width:300px;text-align:center;backdrop-filter:blur(20px)}
+  h1{font-size:19px;margin:0 0 4px;letter-spacing:-.02em}
+  p{color:#8a97a8;font-size:13px;margin:0 0 18px}
+  input{width:100%;box-sizing:border-box;padding:11px 12px;border-radius:8px;border:1px solid rgba(255,255,255,.12);
+        background:#0d1320;color:#e7ecf3;font-size:14px;margin-bottom:10px}
+  button{width:100%;padding:11px;border:none;border-radius:8px;background:#4f8ef7;color:#fff;font-weight:700;
+         font-size:14px;cursor:pointer}
+  .err{color:#ff6b6b;font-size:12.5px;margin-bottom:10px;min-height:16px}
+</style></head><body>
+  <form class="box" method="post" action="/login">
+    <h1>OneShot</h1><p>Enter the access password to continue.</p>
+    <div class="err">{{ error }}</div>
+    <input type="password" name="password" placeholder="Password" autofocus autocomplete="current-password"/>
+    <button type="submit">Sign in</button>
+  </form>
+</body></html>"""
+
+# Paths reachable without logging in.
+_PUBLIC_PATHS = {"/login", "/logout", "/healthz", "/ping"}
+
+
+def _install_auth(app: Flask, password: str) -> None:
+    """Gate every route behind a shared password when APP_PASSWORD is set."""
+
+    @app.before_request
+    def _require_login():
+        if not password:
+            return                      # auth disabled (local dev)
+        p = request.path
+        if p in _PUBLIC_PATHS or p.startswith("/static/"):
+            return
+        if session.get("authed"):
+            return
+        # Unauthenticated: redirect page loads to the login form, 401 the API.
+        if p.startswith("/api/"):
+            return jsonify({"error": "unauthorized", "message": "Login required"}), 401
+        return redirect(url_for("login"))
+
+    @app.route("/login", methods=["GET", "POST"])
+    def login():
+        if not password:
+            return redirect("/")
+        error = ""
+        if request.method == "POST":
+            if (request.form.get("password") or "") == password:
+                session["authed"] = True
+                session.permanent = True
+                return redirect("/")
+            error = "Incorrect password."
+        return render_template_string(_LOGIN_PAGE, error=error)
+
+    @app.route("/logout")
+    def logout():
+        session.clear()
+        return redirect("/login" if password else "/")
 
 
 def create_app(root: Path) -> Flask:
@@ -59,12 +127,35 @@ def create_app(root: Path) -> Flask:
         template_folder=str(Path(__file__).parent / "templates"),
         static_folder=str(Path(__file__).parent / "static"),
     )
-    CORS(app)
+
+    # CORS: same-origin SPA needs none. Only open cross-origin when explicitly
+    # asked (ALLOWED_ORIGIN), never a wildcard on a key-holding server.
+    allowed_origin = os.environ.get("ALLOWED_ORIGIN", "").strip()
+    if allowed_origin:
+        CORS(app, origins=[allowed_origin], supports_credentials=True)
+
+    # Optional password gate. When APP_PASSWORD is set, every page/API requires
+    # login; when unset (local dev) the app stays open. Session key is derived
+    # from the password so logins survive restarts without extra config.
+    app_password = os.environ.get("APP_PASSWORD", "").strip()
+    app.secret_key = (
+        os.environ.get("SECRET_KEY", "").strip()
+        or (hashlib.sha256(("oneshot:" + app_password).encode()).hexdigest() if app_password else os.urandom(24).hex())
+    )
+    _install_auth(app, app_password)
+
     app.config["ROOT"] = root
-    app.config["RUNNER"] = PipelineRunner(root)
+    runner = PipelineRunner(root)
+    app.config["RUNNER"] = runner
+
+    from webapp.background import BackgroundDiscovery
+    app.config["BG_DISCOVERY"] = BackgroundDiscovery(root, runner=runner)
 
     from core.usage import configure as configure_usage
     configure_usage(root / "outputs" / "api_usage.json")
+
+    from core.cache import configure as configure_cache
+    configure_cache(root)
 
     app.register_blueprint(api_bp, url_prefix="/api")
     app.register_blueprint(copilot_bp, url_prefix="/api/copilot")
