@@ -1,146 +1,95 @@
 # OneShot
 
-I built OneShot because every other job bot does the one thing that gets you ignored: it blasts the same generic resume at hundreds of postings. OneShot does the opposite. It finds real jobs, scores how well each one fits *your* resume, and then writes a unique, ATS-optimised resume and cover letter for every match — and hands them to you, ready to send.
+**Most job bots fire the same résumé at a thousand listings and call it automation. OneShot does the opposite — it builds one ruthlessly-tailored, ATS-beating application per job, proves the quality with a score, prepares your screening answers, and hands it to you ready to send.**
 
-It never submits anything for you. You stay in control: review the documents, tweak if you want, and apply yourself.
-
-```
-python run.py          # opens the web UI at http://127.0.0.1:5001
-python run.py run      # CLI: search + tailor, results land in pending_review.csv
-```
-
----
-
-## ★ What makes OneShot different from every other job bot
-
-> **Most job bots are spray-and-pray: one resume, a thousand auto-submits, zero quality control. OneShot is a quality pipeline — it writes a fresh, keyword-matched resume and cover letter per job, scores it against an ATS, rewrites until it passes, and only then gives it to you.**
-
-| | Typical job bots | OneShot |
-|---|---|---|
-| **Resume** | One generic file sent everywhere | A unique resume per job, rewritten with that job's keywords |
-| **ATS quality** | None | Score → rewrite loop until your target ATS score is hit |
-| **Job fit** | Keyword match only | An LLM scores each job 1–10 against your real resume; you set the cutoff |
-| **LLM cost** | Opaque routing | One provider you pick (Claude/OpenAI/Gemini) runs the whole engine — no surprise spend |
-| **Who applies** | The bot auto-submits in the background | **You do** — OneShot stops at finished documents |
-| **Your data** | A cloud subscription service | 100% local — your resume and history never leave your machine |
-| **Bad LLM output** | Crashes | 4-stage JSON repair recovers it |
-
-The heart of it is the **ATS feedback loop** (section 1 below). On the benchmark it lifts average ATS scores by +16 points and gets 3× more applications past the target threshold than a single-pass writer.
-
----
-
-## What makes it different — in depth
-
-Most job-bot projects stop at "scrape jobs, autofill forms." OneShot treats the problem as quality control, not a fire-and-forget script. And because it never touches a Submit button, you never risk your accounts getting flagged for automation.
-
-### 1. Feedback-controlled resume generation
-
-A naive tool writes a resume once and moves on. OneShot runs an ATS audit after every pass and rewrites whenever the score is below your target:
-
-```
-write resume  ->  ATS audit (score/100)  ->  below target?
-    ^                                               |
-    |_______________rewrite with audit notes________|
-```
-
-The rewrite prompt carries the previous score, the missing keywords, and the auditor's advice forward. OneShot keeps the best attempt by score across all passes, with a configurable cap (`ATS_MAX_REWRITES`) so you control the cost.
-
-On the benchmark this improves average ATS scores by ~16 points and gets roughly 3× more applications past target vs single-pass generation.
-
-### 2. Single-provider engine — your choice, end to end
-
-You pick ONE provider in Settings (`LLM_PROVIDER`) and the whole pipeline —
-scoring, resume, cover letters, copilot, parsing — runs on it. No
-cross-provider fallback and no surprise spend on a provider you didn't choose.
-
-| Provider | Smart model (writing) | Cheap model (scoring/parse) |
-|---|---|---|
-| Claude *(default)* | claude-sonnet-4-6 | claude-haiku-4-5 |
-| OpenAI | gpt-4o | gpt-4o-mini |
-| Gemini | gemini-2.5-pro | gemini-2.5-flash |
-
-The two tiers are just two models of the **same** provider. If the selected
-provider fails, OneShot raises a clear message ("Selected provider X failed…
-check the key in Settings or switch provider") instead of silently switching.
-`LLM_MODEL` / `LLM_MODEL_CHEAP` override the models, but only when they belong
-to the selected provider. (The old `LLM_PROVIDER_SMART` / `LLM_PROVIDER_CHEAP`
-routing was removed.)
-
-Cost is tracked per provider and shown in Settings after each run.
-
-### 3. Multi-tier JSON repair for unreliable LLM output
-
-LLMs don't always return valid JSON — truncated responses, unescaped newlines, trailing commas. OneShot applies four strategies in order before giving up:
-
-1. Direct `json.loads`
-2. Extract the outermost `{...}` and retry
-3. Walk the string char-by-char, escape control characters, strip trailing commas
-4. Regex salvage — pull individual scored entries from a partially-valid array
-
-The benchmark measures 75% overall recovery across 40 intentionally broken inputs, 100% on clean and well-formed-but-messy ones.
-
-### 4. Local-first, no subscriptions
-
-Everything runs on your machine. No account, no cloud sync, no middleman. Job data, tailored resumes, cover letters, and history all live in `outputs/` as CSVs and PDFs you can open without the app.
-
-### 5. Review-first by design
-
-OneShot writes every document and stops. You open the ready-to-apply record, read the resume and cover letter, and submit it yourself. Nothing is ever sent on your behalf — which is exactly why it's safe to run as often as you like.
-
-Other niceties: already-seen jobs in `applied_jobs.csv` are skipped, and the same posting appearing at two locations is deduplicated before tailoring so you never burn LLM calls on a duplicate.
-
----
-
-## Benchmark
+Search the freshest roles → tailor a résumé + cover letter that actually clears the ATS → walk in with your answers already written. That's the whole game.
 
 ```bash
-python benchmark.py --mode repair   # no API key needed
-python benchmark.py --simulate      # all sections, no API calls
-python benchmark.py                 # full run with real LLM calls
-python benchmark.py --provider gemini
+python run.py            # web UI at http://127.0.0.1:5001
+python run.py run        # CLI: search + tailor, results in pending_review.csv
 ```
 
-**Fit scoring** — the LLM scorer against 25 hand-labeled jobs (15 relevant, 10 irrelevant) on a sample SWE resume:
+---
+
+## What OneShot does that other job bots simply don't
+
+Forget the table-stakes (scraping boards, basic keyword tailoring — everyone has that). Here's what's actually unique:
+
+### 1. It rewrites your résumé until it *beats* the ATS — and proves it
+
+Every other tailor writes a résumé once and ships it. OneShot **audits its own output against an ATS, sees the score, and rewrites with the audit notes** — looping until it clears your target, keeping the best attempt by score.
 
 ```
-               Predicted YES   Predicted NO
-Actual YES         13  (TP)        2  (FN)
-Actual NO           1  (FP)        9  (TN)
-
-  Accuracy  : 88.0%   Precision : 92.9%
-  Recall    : 86.7%   F1 Score  : 89.7%
-
-Baseline (accept everything): 60.0% accuracy, 40% wasted applications
+write résumé → ATS audit (score/100) → below target?
+   ^                                          |
+   |____________ rewrite with the misses _____|
 ```
 
-**ATS rewrite loop** — average score improvement across 3 sample jobs:
+**Proof:** on the benchmark it lifted mean ATS scores **66 → 82 (+16 points)** and took jobs reaching target from **0 of 3 to 3 of 3**. It's not "tailoring." It's optimization with a measured outcome.
+
+### 2. It hunts *fresh* — and never shows you the same job twice
+
+Apply-early-or-lose is real. OneShot starts at the tightest time window and **auto-widens only if it comes up empty**, so you catch roles posted hours ago. Then a cross-run memory kills repeats: a job you already saw won't come back — **even if it's reposted under a brand-new ID or a different location string**. Most bots re-dump the same listings every run. OneShot surfaces only what's genuinely new.
+
+### 3. It prepares your *answers*, not just your documents
+
+This one is unheard of in a job bot. For every prepared application, an **Application Copilot pre-bakes answers to that job's screening and behavioral questions** ("Why this company?", "Years with X?", "Walk me through a project") — grounded **only in your verified profile and résumé**, with a confidence score on each. You open a job and your answers are already written.
+
+### 4. It refuses to lie for you
+
+Recruiters smell fabrication. OneShot is **truth-locked**: résumé, cover letter, and Copilot answers can only use facts from your real résumé. A guardrail actively flags invented numeric claims (e.g. "7 years of Python" when your résumé says 5) and drops confidence instead of bluffing. Honesty is enforced in code, not hoped for.
+
+### 5. It doesn't leak the wrong country
+
+JobSpy-based scrapers happily return Beijing and Hong Kong "remote" roles on a US search. OneShot runs a **positive geo-filter** that keeps only your allowed countries (and ambiguous remote), so your queue isn't polluted with jobs you can't take.
+
+### 6. It doesn't crash on a bad LLM response
+
+LLMs return broken JSON — truncated, unescaped, half-finished. A hobby bot dies; OneShot **recovers**. A 4-stage JSON-repair pipeline plus a field-level salvage rescues **75% of intentionally-broken outputs**, and résumé extraction pulls your links and location even out of a JSON response that got cut off mid-sentence.
+
+### 7. It won't surprise your wallet
+
+One provider you pick (Claude, OpenAI, or Gemini) runs **the entire engine** — no silent cross-provider fallback spending money on a model you didn't choose. Every call is counted and costed live in Settings.
+
+> **The philosophy:** quality over spray. One tailored, review-ready package per job. OneShot never clicks Submit — *you* do — so there's zero auto-apply footprint on your accounts, and you can run it as often as you like.
+
+---
+
+## Proof — measured, not claimed
+
+Run it yourself: `python benchmark.py` (or `--simulate` for no API calls, `--mode repair` for no key at all).
+
+**Fit scoring** — can the LLM tell a real match from a near-miss? Against 25 hand-labeled jobs on a sample résumé:
 
 ```
-  job                             before   after   gain
-  senior-backend-python-kafka         72      87    +15
-  platform-engineer-kubernetes        65      81    +16
-  data-engineer-airflow-dbt           61      79    +18
-
-  Mean: 66 -> 82 (+16 pts)   Jobs reaching target: 0/3 -> 3/3
+  Accuracy 88.0%   Precision 92.9%   Recall 86.7%   F1 89.7%
+  vs. accept-everything baseline: 60% accuracy, 40% of applications wasted
 ```
+**What it proves:** it cuts ~80% of irrelevant applications while missing only ~13% of good ones — you spend tokens (and attention) on jobs that actually fit.
 
-**JSON repair** — 40 intentionally broken outputs:
+**ATS rewrite loop** — does the feedback loop work?
 
 ```
-  clean               10/10  100%
-  truncated            4/10   40%   (genuinely unrecoverable)
-  unescaped newlines   8/10   80%
-  trailing commas      8/10   80%
-  Overall:            30/40   75%
+  job                         before  after  gain
+  senior-backend-python-kafka    72     87    +15
+  platform-engineer-k8s          65     81    +16
+  data-engineer-airflow          61     79    +18
+  Mean 66 → 82 (+16)     Reaching target: 0/3 → 3/3
 ```
+**What it proves:** the rewrite isn't cosmetic — it reliably pushes a résumé past the bar a single pass misses.
 
-Results save to `outputs/benchmark_<timestamp>.json`.
+**JSON-repair resilience** — 40 deliberately-broken LLM outputs:
+
+```
+  clean 10/10 · unescaped 8/10 · trailing-comma 8/10 · truncated 4/10 → 75% overall
+```
+**What it proves:** the pipeline keeps producing applications when the model misbehaves, instead of throwing away the whole run.
 
 ---
 
 ## Quick start
 
-**Recommended Python: 3.11 or 3.12** (3.13 may fail to build some wheels).
+**Use Python 3.11 or 3.12** (3.13 may fail to build some wheels).
 
 ```bash
 git clone https://github.com/Gaurav-0704/OneShot
@@ -148,99 +97,31 @@ cd OneShot
 python setup.py          # Windows: py -3.12 setup.py
 ```
 
-That one command creates a virtualenv (`./venv`), installs dependencies, asks
-for an API key (Gemini has a free tier), and opens the web UI at
-http://127.0.0.1:5001.
+One command sets up a virtualenv, installs everything, asks for an API key (Gemini has a free tier), and opens the UI. Then: **Profile** → upload your résumé (it auto-fills your details) → **Settings** → confirm your key/provider → **Search & Run** → set terms → **Start Run**.
 
-Then, in the app:
-1. **Profile tab** → upload your resume (auto-fills your details).
-2. **Settings tab** → confirm your API key and pick a provider (Claude is the default).
-3. **Search & Run** → set your search terms → **Start Run**.
+Everything you generate stays on your machine under `config/` and `outputs/` (both gitignored).
 
-**Minimum to run:** one API key from any provider + the required profile fields below.
-
-> **Deploying to a server (Railway/cloud)?** The repo includes `Procfile`,
-> `railway.toml`, `wsgi.py`, and `runtime.txt` for that. They are **deploy-only
-> and ignored when you run locally** — you can leave them untouched. On a public
-> deployment, set `APP_PASSWORD` (see `.env.example`) so only people with the
-> password can use it.
-
-Everything you generate (résumés, cover letters, tracking, logs) stays on your
-own machine under `config/` and `outputs/` — both gitignored, so nothing is ever
-shared or committed.
-
----
-
-## What you actually need to fill in
-
-OneShot only asks for what the search-and-tailor engine genuinely uses. Everything else is optional.
-
-**Required**
-- Master resume (PDF / DOCX / DOC / TXT / MD)
-- First and last name
-- Email
-- City and country
-- Years of experience
-- A short profile summary the AI uses for tailoring
-
-**Optional** — phone, LinkedIn, GitHub/portfolio, professional summary. Add them if you have them; leave them blank if you don't. No work-authorization questions, no demographics, no salary forms — those belonged to the old auto-apply flow and are gone.
-
----
-
-## Configuration
-
-```
-config/
-  personal.yaml       name, contact info, address
-  preferences.yaml    search terms, sites, blacklists, salary floor, fit-score floor
-  questions.yaml      years of experience + profile summary used for tailoring
-  master_resume.pdf   your real resume
-  resume_instructions.md   formatting rules the writer follows
-```
-
-All editable through the web UI or directly as YAML/PDF.
+> Deploying to a server? `Procfile` / `railway.toml` / `wsgi.py` / `runtime.txt` are deploy-only and ignored locally. On a public deployment set `APP_PASSWORD` (see `.env.example`) so only people with the password can use it — and your API keys.
 
 ---
 
 ## How the pipeline runs
 
-Six agents in `agents/`, one per stage:
-
 ```
-ProfileAgent    reads YAML configs + resume + optional GitHub repos
-    |
-DiscoveryAgent  scrapes LinkedIn / Indeed / Glassdoor / ZipRecruiter / Google Jobs
-    |           applies rule filters (blacklist, salary floor)
-    |           optionally scores each job 1-10 against your resume
-    |
-TailorAgent     for each job above the fit-score floor:
-    |             Phase 1 — fetch full JD, build a company brief (cheap LLM call)
-    |             Phase 2 — write tailored resume + cover letter + ATS audit
-    |                        rewrite if below target, keep the best attempt
-    |
-HumanizerAgent  strip AI-sounding filler from the generated text
-    |
-PackagerAgent   write the ready-to-apply record to pending_review.csv
-    |
-LearnerAgent    post-run: gap analysis across your recent runs
+ProfileAgent    your résumé + profile (and GitHub, if you add it)
+   ↓
+DiscoveryAgent  scrape LinkedIn / Indeed / Glassdoor / ZipRecruiter / Google
+   ↓            geo-filter · freshness + repost kill · LLM fit score (1–10)
+TailorAgent     per job: company brief → résumé + cover letter + ATS audit
+   ↓                     rewrite until it clears the bar, keep the best
+HumanizerAgent  strip AI-tells; truth-check against your real facts
+   ↓
+PackagerAgent   ready-to-apply record + pre-baked Copilot answers
+   ↓
+LearnerAgent    post-run gap analysis across your recent runs
 ```
 
-`agents/orchestrator.py` runs the loop one job at a time, checking a stop flag between jobs so a stop from the web UI takes effect promptly.
-
----
-
-## CLI
-
-```
-python run.py                       open the web UI
-python run.py run                   search + tailor; results go to pending_review.csv
-python run.py run --limit 5         cap this run to 5 tailored applications
-python run.py run --no-score        skip LLM fit scoring (faster, cheaper)
-python run.py run --site linkedin   restrict discovery to one platform
-python run.py profile               print the assembled profile, no scraping
-python run.py status                today / lifetime counts
-python run.py history --limit 20    last N records
-```
+Generation runs in parallel; ask for N applications and you get **exactly N** saved (failures don't eat your quota).
 
 ---
 
@@ -250,50 +131,33 @@ python run.py history --limit 20    last N records
 outputs/
   pending_review.csv     finished applications waiting for your review
   applied_jobs.csv       the ones you marked as applied
-  failed_jobs.csv        jobs where something broke
-  last_discovered.json   last discovery snapshot (shown in the Discovered tab)
-  tailored/<slug>/       per-job folder: resume.pdf, cover_letter.pdf, ats_audit.txt
-  api_usage.json         LLM call counts and estimated cost per provider
-  logs/                  timestamped run logs
-  benchmark_*.json       benchmark results
+  tailored/<slug>/       per-job: resume.pdf, cover_letter.pdf, ats_audit.txt, copilot_data.json
+  seen_jobs.sqlite       cross-run memory (the "never twice" engine)
+  last_discovered.json   latest scored discovery snapshot
+  api_usage.json         per-provider call counts + estimated cost
 ```
 
 ---
 
-## A few things to know
+## Configuration & CLI
 
-The LLM is used for scoring fit, writing resumes and cover letters, and building company briefs — all on the single provider you select in Settings (`LLM_PROVIDER`, default Claude). The smart model writes; the cheap model of the same provider handles scoring/parsing. Switch providers in the Settings tab or `.env`.
+Edit everything in the web UI, or directly in `config/` (`personal.yaml`, `preferences.yaml`, `questions.yaml`, `master_resume.*`).
 
-OneShot reads job boards that don't love being scraped, so keep your runs reasonable. But since it never logs in or submits on your behalf, there's no auto-apply footprint on your accounts.
-
----
-
-## File layout
-
-```
-benchmark.py             pipeline quality measurements
-run.py                   CLI entry point
-setup.py                 first-run installer
-models.py                UserProfile and JobApplication dataclasses
-
-agents/                  six pipeline stages + orchestrator
-core/                    scraper, filter, parser, PDF generator, tracker, utilities
-core/_vendor/jobspy/     vendored copy of cullenwatson/JobSpy
-llm/                     LLM provider abstraction (Claude / OpenAI / Gemini)
-webapp/                  Flask backend + single-page web UI
-config/                  your profile, preferences, and resume (gitignored)
-outputs/                 generated files (gitignored)
-docs/                    source attribution notes
+```bash
+python run.py run --limit 5        prepare 5 applications
+python run.py run --no-score       skip LLM fit scoring (faster/cheaper)
+python run.py run --site linkedin  restrict to one board
+python run.py status               today / lifetime counts
 ```
 
 ---
 
 ## Source attribution
 
-Built on top of open-source projects. See `docs/CODEBASE_NOTES.md` for the file-by-file mapping.
+Built on top of open-source projects (see `docs/CODEBASE_NOTES.md`):
 
-- [cullenwatson/JobSpy](https://github.com/cullenwatson/JobSpy) — job board scraping
-- [rotsl/resume-tailor](https://github.com/rotsl/resume-tailor) — resume tailoring and PDF generation
+- [cullenwatson/JobSpy](https://github.com/cullenwatson/JobSpy) — job-board scraping
+- [rotsl/resume-tailor](https://github.com/rotsl/resume-tailor) — résumé tailoring + PDF generation
 - [GodsScion/Auto_job_applier_linkedIn](https://github.com/GodsScion/Auto_job_applier_linkedIn) — profile/data-model reference
 - [simonfong6/auto-apply](https://github.com/simonfong6/auto-apply) — application field reference
 
