@@ -4,6 +4,10 @@
 
 Search the freshest roles → tailor a résumé + cover letter that actually clears the ATS → walk in with your answers already written. That's the whole game.
 
+### ▶ Try it live — [oneshot.up.railway.app](https://oneshot.up.railway.app/)
+
+See it in action before you set anything up: upload a résumé, run a search, and watch it tailor real applications. Then come back and run your own copy:
+
 ```bash
 python run.py            # web UI at http://127.0.0.1:5001
 python run.py run        # CLI: search + tailor, results in pending_review.csv
