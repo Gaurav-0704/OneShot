@@ -148,6 +148,68 @@ def questions():
     return jsonify({"ok": True})
 
 
+# ── Reset demo data (PROTOTYPE ONLY) ─────────────────────────────────────────
+# Wipes the current user's résumé, profile and generated results so the next
+# person on a shared demo can start fresh. Deliberately does NOT touch the
+# API keys (.env) — the demo must keep working — nor the neutral preferences.
+# This is a convenience for the public prototype, not intended for real use.
+
+_BLANK_PERSONAL = {
+    "name": {"first": "", "middle": "", "last": ""},
+    "contact": {"email": "", "phone": "", "linkedin": "", "github": "", "website": ""},
+    "address": {"city": "", "state": "", "zipcode": "", "country": ""},
+}
+
+
+@bp.route("/reset-demo", methods=["POST"])
+def reset_demo():
+    root = _root()
+    cleared: list[str] = []
+
+    # 1. Blank the profile; delete Q&A + uploaded résumé + showcase.
+    try:
+        _write_yaml("personal.yaml", _BLANK_PERSONAL)
+        cleared.append("profile")
+    except Exception:
+        pass
+    for name in ["questions.yaml", "showcase.pdf",
+                 "master_resume.pdf", "master_resume.docx", "master_resume.doc",
+                 "master_resume.txt", "master_resume.md"]:
+        p = root / "config" / name
+        if p.exists():
+            try:
+                p.unlink(); cleared.append(name)
+            except Exception:
+                pass
+
+    # 2. Clear generated outputs (files + per-job folders + logs) — but keep the
+    #    outputs/ directory itself and its .gitkeep.
+    out = root / "outputs"
+    for name in ["pending_review.csv", "applied_jobs.csv", "failed_jobs.csv",
+                 "last_discovered.json", "seen_jobs.sqlite", "seen_jobs.sqlite-wal",
+                 "seen_jobs.sqlite-shm", "qa_store.sqlite", "qa_store.sqlite-wal",
+                 "qa_store.sqlite-shm", "learned_qa.json", "api_usage.json",
+                 "run_insights.json"]:
+        p = out / name
+        if p.exists():
+            try:
+                p.unlink(); cleared.append(name)
+            except Exception:
+                pass
+    import shutil
+    for sub in ["tailored", "logs", "cache", "applications", "history"]:
+        d = out / sub
+        if d.exists():
+            try:
+                shutil.rmtree(d, ignore_errors=True)
+                d.mkdir(parents=True, exist_ok=True)
+                cleared.append(sub + "/")
+            except Exception:
+                pass
+
+    return jsonify({"ok": True, "cleared": cleared})
+
+
 # ── Applications ─────────────────────────────────────────────────────────────
 
 @bp.route("/applications/applied", methods=["GET"])

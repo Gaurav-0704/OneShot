@@ -8,6 +8,8 @@ Search the freshest roles → tailor a résumé + cover letter that actually cle
 
 See it in action before you set anything up: upload a résumé, run a search, and watch it tailor real applications. Then come back and run your own copy:
 
+> **Heads-up on the live demo:** it's a single shared instance, so you're using the same workspace as everyone else. On the Home page there's a **"Clear data & start fresh"** button that wipes the résumé, profile, and generated applications (the API key stays) so you can begin clean. That reset is a **prototype-only convenience** — the real app is meant to run locally or on your own private deployment, one workspace per person.
+
 ```bash
 python run.py            # web UI at http://127.0.0.1:5001
 python run.py run        # CLI: search + tailor, results in pending_review.csv

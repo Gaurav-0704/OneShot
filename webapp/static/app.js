@@ -1802,6 +1802,40 @@ async function loadShowcaseStatus() {
   });
 })();
 
+// ── Demo reset (PROTOTYPE ONLY) ──────────────────────────────────────────
+// Wipes résumé + profile + generated results so a new person can start fresh.
+// Does NOT touch API keys. Confirmation required; not for real use.
+(function bindResetDemo() {
+  const btn = document.getElementById("btn-reset-demo");
+  if (!btn) return;
+  btn.addEventListener("click", async () => {
+    if (!confirm(
+      "Clear ALL data and start fresh?\n\n" +
+      "This wipes the uploaded résumé, the profile, and every generated " +
+      "application. Your API key is kept. This cannot be undone."
+    )) return;
+    btn.disabled = true;
+    const orig = btn.textContent;
+    btn.textContent = "Clearing…";
+    try {
+      const r = await api.post("/api/reset-demo", {});
+      if (r.ok) {
+        try { localStorage.removeItem("oneshot_counts"); } catch (_) {}
+        toast(`✓ Cleared — ${(r.cleared || []).length} item(s) reset. Fresh start ready.`, "ok");
+        refreshResumeStatus(); loadProfile(); renderValidity(); updateSidebarCompleteness();
+        loadStatus(); if (window.loadHomeCharts) loadHomeCharts(); if (window.loadInsights) loadInsights();
+      } else {
+        toast("Clear failed: " + (r.error || ""), "err");
+      }
+    } catch (e) {
+      toast("Clear failed: " + e, "err");
+    } finally {
+      btn.disabled = false;
+      btn.textContent = orig;
+    }
+  });
+})();
+
 // ── Boot ────────────────────────────────────────────────────────────────
 
 (function init() {
