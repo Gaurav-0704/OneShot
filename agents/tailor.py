@@ -401,7 +401,7 @@ class TailorAgent(Agent):
         # Logging
         if best["score"] >= target_score:
             self.info(
-                f"ATS score: {best['score']}/100 ✓ "
+                f"ATS score: {best['score']}/100 (pass) "
                 f"({attempt} attempt{'s' if attempt > 1 else ''})"
             )
         else:
